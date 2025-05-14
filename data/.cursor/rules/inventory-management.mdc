@@ -1,0 +1,506 @@
+---
+description: Inventory management implementation
+globs: "data/**/*"
+alwaysApply: false
+---
+
+# Inventory Management
+
+This document outlines the implementation details for inventory tracking, management, and synchronization in our multi-tenant e-commerce platform.
+
+## Inventory Data Model
+
+### Core Entities
+
+1. **Product Inventory**
+   * Schema definition:
+     ```prisma
+     model Inventory {
+       id          String    @id @default(uuid())
+       productId   String
+       variantId   String?   // For variant-specific inventory
+       sku         String    @unique
+       quantity    Int       @default(0)
+       reserved    Int       @default(0)  // Items in checkout or processing
+       available   Int       @default(0)  // Virtual field (quantity - reserved)
+       lowStock    Int       // Threshold for low stock alerts
+       backorder   Boolean   @default(false)
+       tenantId    String
+       locationId  String?   // For multi-location inventory
+       updatedAt   DateTime  @updatedAt
+       // Relationships
+       product     Product   @relation(fields: [productId], references: [id])
+       tenant      Tenant    @relation(fields: [tenantId], references: [id])
+       location    Location? @relation(fields: [locationId], references: [id])
+     }
+     ```
+
+2. **Inventory Transaction**
+   * Track all inventory changes
+   * Schema definition:
+     ```prisma
+     model InventoryTransaction {
+       id          String    @id @default(uuid())
+       inventoryId String
+       type        TransactionType // RECEIVE, SHIP, ADJUST, RESERVE, RELEASE
+       quantity    Int       // Can be positive or negative
+       reference   String?   // Order/PO number reference
+       reason      String?   // Reason for adjustment
+       createdAt   DateTime  @default(now())
+       createdBy   String    // User who performed transaction
+       tenantId    String
+       // Relationships
+       inventory   Inventory @relation(fields: [inventoryId], references: [id])
+       tenant      Tenant    @relation(fields: [tenantId], references: [id])
+     }
+     
+     enum TransactionType {
+       RECEIVE     // Stock received
+       SHIP        // Stock shipped out
+       ADJUST      // Manual adjustment
+       RESERVE     // Reserved for order
+       RELEASE     // Released from reservation
+     }
+     ```
+
+3. **Inventory Location**
+   * For multi-location inventory tracking
+   * Schema definition:
+     ```prisma
+     model Location {
+       id          String    @id @default(uuid())
+       name        String
+       type        LocationType // WAREHOUSE, STORE, VIRTUAL
+       address     Json?     // Structured address data
+       isDefault   Boolean   @default(false)
+       isActive    Boolean   @default(true)
+       tenantId    String
+       // Relationships
+       tenant      Tenant    @relation(fields: [tenantId], references: [id])
+       inventory   Inventory[]
+     }
+     
+     enum LocationType {
+       WAREHOUSE
+       STORE
+       VIRTUAL     // For dropshipping or special handling
+     }
+     ```
+
+## Inventory Operations
+
+### Stock Management
+
+1. **Update Operations**
+   * Implement atomic updates with optimistic locking
+   * Track all changes via transaction records
+   * Example service method:
+     ```typescript
+     async adjustStock(
+       inventoryId: string,
+       quantity: number,
+       type: TransactionType, 
+       reason: string,
+       userId: string
+     ): Promise<Inventory> {
+       return this.prisma.$transaction(async (tx) => {
+         // Get current inventory
+         const inventory = await tx.inventory.findUnique({
+           where: { id: inventoryId },
+         });
+         
+         if (!inventory) {
+           throw new NotFoundException('Inventory not found');
+         }
+         
+         // Calculate new quantity
+         const newQuantity = inventory.quantity + quantity;
+         
+         if (newQuantity < 0 && !inventory.backorder) {
+           throw new BadRequestException('Insufficient inventory');
+         }
+         
+         // Update inventory
+         const updated = await tx.inventory.update({
+           where: { id: inventoryId },
+           data: { 
+             quantity: newQuantity,
+             // Update available calculation
+             available: Math.max(0, newQuantity - inventory.reserved)
+           },
+         });
+         
+         // Create transaction record
+         await tx.inventoryTransaction.create({
+           data: {
+             inventoryId,
+             type,
+             quantity,
+             reason,
+             createdBy: userId,
+             tenantId: inventory.tenantId,
+             reference: reason
+           },
+         });
+         
+         return updated;
+       });
+     }
+     ```
+
+2. **Reservation System**
+   * Reserve inventory during checkout process
+   * Release reservations on cart abandonment or order cancellation
+   * Example implementation:
+     ```typescript
+     async reserveInventory(
+       sku: string,
+       quantity: number,
+       orderId: string,
+       userId: string
+     ): Promise<boolean> {
+       return this.prisma.$transaction(async (tx) => {
+         // Find inventory by SKU
+         const inventory = await tx.inventory.findUnique({
+           where: { sku },
+         });
+         
+         if (!inventory) {
+           throw new NotFoundException(`SKU ${sku} not found`);
+         }
+         
+         // Check if sufficient inventory is available
+         if (inventory.available < quantity && !inventory.backorder) {
+           return false; // Not enough stock
+         }
+         
+         // Update inventory - increase reserved count
+         await tx.inventory.update({
+           where: { id: inventory.id },
+           data: { 
+             reserved: { increment: quantity }
+           },
+         });
+         
+         // Create reservation transaction
+         await tx.inventoryTransaction.create({
+           data: {
+             inventoryId: inventory.id,
+             type: 'RESERVE',
+             quantity,
+             reference: orderId,
+             createdBy: userId,
+             tenantId: inventory.tenantId,
+           },
+         });
+         
+         return true;
+       });
+     }
+     ```
+
+3. **Batch Operations**
+   * Support bulk inventory updates
+   * Implement inventory import functionality
+   * Create stock taking reconciliation process
+
+### Business Rules
+
+1. **Low Stock Alerts**
+   * Trigger notifications when stock falls below threshold
+   * Example implementation:
+     ```typescript
+     // Hook into inventory updates
+     @OnEvent('inventory.updated')
+     async checkLowStock(payload: { inventory: Inventory }) {
+       const { inventory } = payload;
+       
+       // Check if stock is below threshold
+       if (inventory.quantity <= inventory.lowStock) {
+         // Create low stock notification
+         await this.notificationService.create({
+           type: 'LOW_STOCK',
+           tenantId: inventory.tenantId,
+           data: {
+             sku: inventory.sku,
+             productId: inventory.productId,
+             currentStock: inventory.quantity,
+             threshold: inventory.lowStock,
+           },
+         });
+       }
+     }
+     ```
+
+2. **Backorder Handling**
+   * Allow sales when inventory is depleted
+   * Track backorder status and expected availability
+   * Notify customers about backorder status
+
+3. **Allocation Rules**
+   * First-in, first-out (FIFO) allocation
+   * Location-based allocation preferences
+   * Support for backorder queue management
+
+## Multi-Location Inventory
+
+### Location Management
+
+1. **Location Types**
+   * Warehouses for storage and fulfillment
+   * Retail stores for in-store pickup
+   * Virtual locations for dropshipping
+   * Create location hierarchy if needed
+
+2. **Inventory Transfer**
+   * Transfer stock between locations
+   * Track in-transit inventory
+   * Support for transfer validation and confirmation
+   * Example implementation:
+     ```typescript
+     async transferInventory(
+       fromLocationId: string,
+       toLocationId: string,
+       sku: string,
+       quantity: number,
+       userId: string
+     ): Promise<TransferResult> {
+       return this.prisma.$transaction(async (tx) => {
+         // Find inventory at source location
+         const sourceInventory = await tx.inventory.findFirst({
+           where: { 
+             sku,
+             locationId: fromLocationId
+           },
+         });
+         
+         if (!sourceInventory || sourceInventory.available < quantity) {
+           throw new BadRequestException('Insufficient inventory at source location');
+         }
+         
+         // Find or create inventory at destination
+         let destInventory = await tx.inventory.findFirst({
+           where: { 
+             sku,
+             locationId: toLocationId
+           },
+         });
+         
+         if (!destInventory) {
+           // Create new inventory record at destination
+           destInventory = await tx.inventory.create({
+             data: {
+               productId: sourceInventory.productId,
+               variantId: sourceInventory.variantId,
+               sku,
+               quantity: 0,
+               lowStock: sourceInventory.lowStock,
+               backorder: sourceInventory.backorder,
+               tenantId: sourceInventory.tenantId,
+               locationId: toLocationId
+             },
+           });
+         }
+         
+         // Decrease at source
+         await tx.inventory.update({
+           where: { id: sourceInventory.id },
+           data: { quantity: { decrement: quantity } },
+         });
+         
+         // Create transaction for source
+         await tx.inventoryTransaction.create({
+           data: {
+             inventoryId: sourceInventory.id,
+             type: 'SHIP',
+             quantity: -quantity,
+             reference: `TRANSFER-TO-${toLocationId}`,
+             createdBy: userId,
+             tenantId: sourceInventory.tenantId,
+           },
+         });
+         
+         // Increase at destination
+         await tx.inventory.update({
+           where: { id: destInventory.id },
+           data: { quantity: { increment: quantity } },
+         });
+         
+         // Create transaction for destination
+         await tx.inventoryTransaction.create({
+           data: {
+             inventoryId: destInventory.id,
+             type: 'RECEIVE',
+             quantity,
+             reference: `TRANSFER-FROM-${fromLocationId}`,
+             createdBy: userId,
+             tenantId: destInventory.tenantId,
+           },
+         });
+         
+         return {
+           success: true,
+           sourceInventory: { id: sourceInventory.id, newQuantity: sourceInventory.quantity - quantity },
+           destInventory: { id: destInventory.id, newQuantity: destInventory.quantity + quantity }
+         };
+       });
+     }
+     ```
+
+3. **Fulfillment Strategy**
+   * Configure priority ranking for locations
+   * Implement distance-based allocation
+   * Support split fulfillment across locations
+
+### Aggregation and Reporting
+
+1. **Total Inventory Views**
+   * Aggregate inventory across all locations
+   * Create virtual available totals
+   * Support filtering by location type or region
+
+2. **Inventory Reports**
+   * Inventory valuation reports
+   * Stock level reports by location
+   * Movement analysis and velocity reporting
+   * Example query:
+     ```typescript
+     async getInventorySummary(tenantId: string): Promise<InventorySummary[]> {
+       // Get aggregated inventory data
+       const summary = await this.prisma.$queryRaw`
+         SELECT 
+           p.name as productName,
+           i.sku,
+           SUM(i.quantity) as totalQuantity,
+           SUM(i.reserved) as totalReserved,
+           SUM(i.quantity - i.reserved) as totalAvailable,
+           json_agg(json_build_object(
+             'locationId', l.id,
+             'locationName', l.name,
+             'quantity', i.quantity,
+             'reserved', i.reserved
+           )) as locationBreakdown
+         FROM "Inventory" i
+         JOIN "Product" p ON i.product_id = p.id
+         JOIN "Location" l ON i.location_id = l.id
+         WHERE i.tenant_id = ${tenantId}
+         GROUP BY p.name, i.sku
+         ORDER BY p.name
+       `;
+       
+       return summary;
+     }
+     ```
+
+## Inventory Synchronization
+
+### External Integrations
+
+1. **ERP Integration**
+   * Bidirectional sync with external systems
+   * Handle inventory updates from ERP
+   * Push inventory changes to ERP
+   * Resolve conflicts with versioning
+
+2. **POS Integration**
+   * Real-time inventory updates from point-of-sale
+   * Support for offline POS with batch updates
+   * Handle inventory reconciliation
+
+3. **Warehouse Management**
+   * Integration with WMS systems
+   * Barcode scanning support
+   * Pick, pack, and ship workflows
+   * Receiving and putaway processes
+
+### Sync Mechanisms
+
+1. **Webhooks**
+   * Expose inventory webhook endpoints
+   * Subscribe to external system events
+   * Handle idempotent updates
+   * Implement retry logic
+
+2. **Scheduled Synchronization**
+   * Periodic full sync for reconciliation
+   * Differential updates for efficiency
+   * Conflict resolution strategy
+   * Example background job:
+     ```typescript
+     @Injectable()
+     export class InventorySyncJob {
+       constructor(
+         private readonly inventoryService: InventoryService,
+         private readonly erpClient: ErpClient,
+         private readonly logger: Logger
+       ) {}
+       
+       @Cron('0 */4 * * *') // Every 4 hours
+       async syncInventory() {
+         this.logger.log('Starting inventory sync job');
+         
+         // Get tenants with ERP integration
+         const tenants = await this.tenantService.findWithErpIntegration();
+         
+         for (const tenant of tenants) {
+           try {
+             // Get last sync timestamp
+             const lastSync = await this.syncLogService.getLastSuccessful(
+               tenant.id, 
+               'INVENTORY_SYNC'
+             );
+             
+             // Get updated inventory from ERP
+             const erpInventory = await this.erpClient.getInventoryUpdates(
+               tenant.erpConfig,
+               lastSync ? lastSync.completedAt : null
+             );
+             
+             // Apply updates
+             const result = await this.inventoryService.bulkUpdate(
+               tenant.id,
+               erpInventory.map(item => ({
+                 sku: item.sku,
+                 quantity: item.stockOnHand,
+                 locationId: this.mapErpLocation(item.locationCode, tenant.id)
+               }))
+             );
+             
+             // Log sync results
+             await this.syncLogService.create({
+               tenantId: tenant.id,
+               type: 'INVENTORY_SYNC',
+               status: 'SUCCESS',
+               details: {
+                 processed: erpInventory.length,
+                 updated: result.updated,
+                 failed: result.failed
+               },
+               startedAt: new Date(),
+               completedAt: new Date()
+             });
+           } catch (error) {
+             this.logger.error(`Inventory sync failed for tenant ${tenant.id}`, error);
+             
+             // Log sync failure
+             await this.syncLogService.create({
+               tenantId: tenant.id,
+               type: 'INVENTORY_SYNC',
+               status: 'FAILED',
+               details: { error: error.message },
+               startedAt: new Date(),
+               completedAt: new Date()
+             });
+           }
+         }
+       }
+     }
+     ```
+
+3. **Event-Driven Updates**
+   * Publish inventory change events
+   * Subscribe to relevant domain events
+   * Use message queue for reliability
+   * Handle out-of-order messages
+
+By implementing these inventory management patterns, we enable accurate stock tracking, multi-location support, and integration with external systems.

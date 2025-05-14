@@ -1,0 +1,124 @@
+---
+description: Backend development conventions and best practices
+globs: "backend/**/*"
+alwaysApply: true
+---
+
+# Backend Conventions
+
+## Tech Stack & Core Framework
+
+* **Runtime & Language:** Node.js (v18+) + TypeScript (`"strict": true`)
+* **Framework:** NestJS (preferred) or Express with `tsyringe` for DI
+  * Structure with modules, controllers, and services
+  * Use dependency injection for testability and loose coupling
+  * Enforce clear separation of concerns
+
+## API Design
+
+1. **REST API Standards**
+   * Use nouns for resources, not verbs (`/products` not `/getProducts`)
+   * Follow HTTP method semantics (GET, POST, PUT, PATCH, DELETE)
+   * Return appropriate status codes (200, 201, 400, 401, 403, 404, 500)
+   * Implement HATEOAS links where appropriate
+   * Version APIs in URI path (`/api/v1/resource`)
+
+2. **GraphQL Standards** (when applicable)
+   * Schema-first approach with code generation
+   * Follow naming conventions (queries: noun, mutations: verb + noun)
+   * Implement proper pagination with cursor or offset
+   * Use DataLoader pattern for N+1 query resolution
+   * Structure resolvers by domain entity
+
+3. **Request/Response Handling**
+   * Validate requests with DTO classes and class-validator
+   * Transform responses with serialization interceptors
+   * Handle errors with unified exception filters
+   * Document with OpenAPI/Swagger (REST) or GraphQL schema
+
+## Data Access Patterns
+
+1. **ORM & Database Interaction**
+   * Use Prisma or TypeORM as a data access layer
+   * Abstract database access behind repository pattern
+   * Enforce tenant isolation in every query
+   * Use transactions for operations spanning multiple entities
+
+2. **Multi-Tenancy Implementation**
+   * Include `tenantId` in all tenant-related entities
+   * Implement tenant context middleware to extract tenant info
+   * Create base repository with automatic tenant filtering
+   * Never expose tenant IDs in public APIs
+
+3. **Caching Strategy**
+   * Cache frequently accessed, rarely changing data
+   * Implement cache invalidation on entity updates
+   * Use Redis for distributed caching
+   * Add proper cache headers for HTTP responses
+
+## Security Practices
+
+1. **Authentication & Authorization**
+   * Implement JWT-based auth with proper signing
+   * Create guards for role-based access control
+   * Store JWT in HttpOnly cookies for web clients
+   * Implement refresh token rotation for security
+
+2. **Data Protection**
+   * Sanitize all user inputs
+   * Encrypt sensitive data at rest
+   * Implement PII protection according to GDPR
+   * Use parameterized queries to prevent SQL injection
+
+3. **API Security**
+   * Rate limit requests to prevent abuse
+   * Implement CORS with specific origins
+   * Use security headers (Helmet middleware)
+   * Validate content types and payload sizes
+
+## Error Handling & Logging
+
+1. **Error Management**
+   * Create domain-specific exception classes
+   * Implement global exception filter
+   * Map exceptions to appropriate HTTP status codes
+   * Never expose stack traces or sensitive info
+
+2. **Logging Standards**
+   * Use structured JSON logging
+   * Include request ID, tenant ID, and correlation ID
+   * Log all errors with context information
+   * Implement different log levels (DEBUG, INFO, WARN, ERROR)
+
+## Testing Strategy
+
+1. **Unit Testing**
+   * Test services in isolation
+   * Mock external dependencies
+   * Focus on business logic
+
+2. **Integration Testing**
+   * Test API endpoints with real HTTP requests
+   * Use in-memory or test database
+   * Test happy paths and edge cases
+
+3. **E2E Testing**
+   * Test critical flows end-to-end
+   * Set up isolated test environment
+   * Use real external services or realistic mocks
+
+## Background Processing
+
+1. **Job Queue Implementation**
+   * Use BullMQ for background processing
+   * Implement retry logic with exponential backoff
+   * Create dedicated worker processes
+   * Monitor queue health and job completion
+
+2. **Scheduled Tasks**
+   * Implement recurring jobs via scheduler
+   * Ensure exactly-once execution semantics
+   * Monitor for missed executions
+   * Implement idempotent operations
+
+These conventions ensure a consistent, secure, and maintainable backend implementation across all services.

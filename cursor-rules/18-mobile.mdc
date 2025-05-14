@@ -1,0 +1,131 @@
+# Mobile Strategy Notes
+
+## General Conventions
+
+### Approach
+
+- **Progressive Web App (PWA) First**:
+  - Focus on optimizing web experience for mobile
+  - Install to home screen capability
+  - Offline functionality for critical features
+  - Push notifications (where supported)
+- **Native Apps** (long-term roadmap):
+  - React Native for cross-platform development
+  - Shared business logic between web and native
+  - Platform-specific UI components and interactions
+
+### Mobile Web Experience
+
+- **Responsive Design**:
+  - Mobile-first approach to all components
+  - Breakpoint system: xs (<576px), sm (≥576px), md (≥768px), lg (≥992px), xl (≥1200px)
+  - Touch-friendly UI elements (minimum target size 44×44 pixels)
+  - Simplified navigation for smaller screens
+- **Performance Optimization**:
+  - Bundle size budget (<200KB initial JS)
+  - Image optimization (responsive sizes, WebP/AVIF)
+  - Code splitting and lazy loading
+  - Server-side rendering for fast initial load
+
+### PWA Implementation
+
+- **Service Worker**:
+  - Offline product browsing
+  - Background sync for offline cart actions
+  - Caching strategies by resource type
+- **Manifest**:
+  - Tenant-specific branding
+  - Custom icons and splash screens
+  - Theme color and orientation settings
+- **Installability**:
+  - Promotion banner for installation
+  - Tenant-configurable installation prompts
+  - Installation analytics
+
+### Native App Strategy (Future)
+
+- **Feature Parity**:
+  - Core shopping experience matching web
+  - Platform-specific enhancements where appropriate
+- **Platform Optimizations**:
+  - iOS: Apple Pay integration, App Clips
+  - Android: Google Pay, App Actions
+- **Distribution**:
+  - White-labeled vs. marketplace model
+  - Enterprise tier: custom-branded apps
+  - App store optimization strategy
+
+## Mobile-Specific Features
+
+### Storefront Features
+
+- **Mobile Checkout**:
+  - Streamlined checkout flow
+  - Digital wallet integration (Apple Pay, Google Pay)
+  - Mobile-optimized form inputs
+- **Store Locator**:
+  - GPS integration
+  - Map view and directions
+  - Store details and hours
+- **Barcode Scanner**:
+  - In-store price checking
+  - QR code for promotions
+  - Add to cart via product code scan
+
+### Merchant Features
+
+- **Mobile Admin**:
+  - Order management on the go
+  - Inventory updates
+  - Sales notifications
+  - Customer communication
+- **In-Store Tools**:
+  - Mobile POS capabilities
+  - Inventory checking
+  - Order lookup
+  - Customer profile access
+
+---
+
+## Roadmap / To-Do
+
+1. **PWA Infrastructure**
+
+   - [ ] Configure and optimize service worker
+   - [ ] Create tenant-specific web manifests
+   - [ ] Implement installability detection and promotion
+
+2. **Mobile Optimization**
+
+   - [ ] Audit and improve responsive design
+   - [ ] Optimize touch interactions and inputs
+   - [ ] Implement mobile-specific navigation patterns
+
+3. **Offline Capabilities**
+
+   - [ ] Define offline-first data strategy
+   - [ ] Implement offline product browsing
+   - [ ] Create offline cart and synchronization
+
+4. **Performance Optimization**
+
+   - [ ] Set up performance monitoring (Core Web Vitals)
+   - [ ] Optimize bundle size and code splitting
+   - [ ] Implement image optimization pipeline
+
+5. **Mobile Payment Integration**
+
+   - [ ] Integrate Apple Pay and Google Pay
+   - [ ] Create streamlined mobile checkout flow
+   - [ ] Test and optimize conversion on mobile devices
+
+6. **Native App Roadmap**
+
+   - [ ] Research React Native feasibility
+   - [ ] Define shared business logic strategy
+   - [ ] Prototype native app shell with web views as interim
+
+7. **Testing & Quality Assurance**
+   - [ ] Set up mobile device testing lab
+   - [ ] Create mobile-specific test scenarios
+   - [ ] Implement responsive visual regression testing

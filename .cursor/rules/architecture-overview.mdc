@@ -1,0 +1,60 @@
+---
+description: High-level architecture overview of the e-commerce platform
+globs: "**/*"
+alwaysApply: true
+---
+
+# Architecture Overview
+
+This e-commerce platform is built as a multi-tenant system serving multiple independent merchants from a single codebase and infrastructure. The architecture follows a modular, service-oriented approach with clear separation of concerns.
+
+## Core Architecture Principles
+
+1. **Multi-tenancy**: All components support multiple tenants with proper data isolation.
+2. **Modularity**: System is divided into domain-specific modules that can evolve independently.
+3. **API-First Design**: All functionality is exposed through well-documented APIs.
+4. **Secure by Default**: Security is built into all aspects of the system.
+5. **Scalability**: All components are designed to scale horizontally.
+
+## System Components
+
+### Frontend Layer
+- **Technologies**: Next.js, TypeScript, Tailwind CSS, React Query
+- **Responsibilities**: Storefront UI, Admin dashboard, Mobile-responsive design
+- **Deployment**: Vercel or containerized in Kubernetes
+
+### Backend Layer
+- **Technologies**: NestJS, TypeScript, GraphQL/REST
+- **Core Services**:
+  - **Auth Service**: Handles authentication, authorization, and user management
+  - **Catalog Service**: Manages products, categories, and search
+  - **Order Service**: Processes orders, carts, and checkout
+  - **Payment Service**: Integrates with payment providers and handles transactions
+  - **Tenant Service**: Manages tenant configuration and onboarding
+
+### Data Layer
+- **Primary Database**: PostgreSQL with row-level multi-tenancy
+- **Caching**: Redis for session data and frequently accessed content
+- **Search**: Elasticsearch for product search and analytics
+
+### Infrastructure
+- **Cloud Provider**: AWS (primary) with multi-region capability
+- **Orchestration**: Kubernetes (EKS) or ECS
+- **CI/CD**: GitHub Actions for automation
+- **Monitoring**: Prometheus, Grafana, and ELK stack
+
+## Cross-Cutting Concerns
+
+1. **Authentication & Authorization**: JWT-based auth with role-based access control
+2. **Logging & Monitoring**: Structured JSON logs with distributed tracing
+3. **Error Handling**: Centralized error tracking and reporting
+4. **Security**: Input validation, output encoding, and least privilege
+5. **Performance**: Caching, CDN, and optimized database queries
+
+## Communication Patterns
+
+1. **Synchronous**: REST/GraphQL for client-server communication
+2. **Asynchronous**: Event-driven architecture for cross-service communication
+3. **Background Processing**: Queue-based job processing for long-running tasks
+
+This architecture provides a solid foundation for a scalable, secure, and maintainable e-commerce platform that can serve multiple tenants while allowing for future growth and adaptation.

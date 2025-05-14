@@ -1,0 +1,138 @@
+# Load Testing & Capacity Planning Notes
+
+## General Conventions
+
+### Testing Strategy
+
+- **Tools**:
+  - Primary: k6 for scripted load tests
+  - Complementary: Apache JMeter for UI-driven tests
+  - Real-user monitoring: New Relic or Datadog RUM
+- **Test Types**:
+  - Baseline capacity tests (constant load)
+  - Stress tests (increasing load until failure)
+  - Spike tests (sudden traffic surge)
+  - Endurance tests (sustained load over extended periods)
+  - Scenario-based tests (mimicking real user journeys)
+
+### Test Scenarios
+
+- **Critical Paths**:
+  - Homepage & category browsing
+  - Product detail view & search
+  - Add to cart & checkout flow
+  - User registration & login
+  - Admin dashboard operations
+- **Load Profiles**:
+  - Normal business hours (steady traffic)
+  - Flash sale events (high concurrent checkouts)
+  - Holiday season (2-3x normal traffic)
+  - Marketing campaign launch (traffic spikes)
+
+### Performance Targets
+
+- **Frontend Metrics**:
+  - Time to First Byte (TTFB): < 200ms p95
+  - First Contentful Paint (FCP): < 1.5s p95
+  - Largest Contentful Paint (LCP): < 2.5s p95
+  - Time to Interactive (TTI): < 3.5s p95
+- **Backend Metrics**:
+  - API response time: < 300ms p95 for reads, < 500ms p95 for writes
+  - Database query time: < 100ms p95
+  - Error rate: < 0.1% under peak load
+
+### Infrastructure Scaling
+
+- **Auto Scaling Rules**:
+  - Trigger scale-out at 70% CPU utilization
+  - Scale-in after 15 minutes below 40% utilization
+  - Minimum 2 instances per service for redundancy
+  - Maximum scale factor: 5x baseline capacity
+- **Database Scaling**:
+  - Read replicas for query-heavy operations
+  - Vertical scaling for write-heavy workloads
+  - Connection pooling tuned to instance size
+
+## Capacity Planning
+
+### Tenant Sizing Tiers
+
+- **Small**:
+  - Up to 1,000 products
+  - Up to 100 concurrent users
+  - Up to 50 orders per day
+- **Medium**:
+  - Up to 10,000 products
+  - Up to 500 concurrent users
+  - Up to 500 orders per day
+- **Large**:
+  - Up to 100,000 products
+  - Up to 2,000 concurrent users
+  - Up to 5,000 orders per day
+- **Enterprise**:
+  - 100,000+ products
+  - 2,000+ concurrent users
+  - Custom infrastructure planning
+
+### Resource Allocation
+
+- **Standard Resource Allocation**:
+  - Small: 0.5 CPU / 1GB RAM per service instance
+  - Medium: 1 CPU / 2GB RAM per service instance
+  - Large: 2 CPU / 4GB RAM per service instance
+  - Enterprise: Custom resource allocation
+- **Database Sizing**:
+  - Small: Shared db.t3.medium (burst capacity)
+  - Medium: Dedicated db.t3.large
+  - Large: Dedicated db.r5.large with read replica
+  - Enterprise: Multi-AZ db.r5.xlarge with multiple read replicas
+
+### Traffic Management
+
+- **Rate Limiting**:
+  - Per-tenant limits based on tier
+  - Gradual fallback under extreme load
+  - Custom rate limit headers for transparency
+- **DDoS Protection**:
+  - AWS Shield Standard for all environments
+  - AWS Shield Advanced for production
+  - Custom WAF rules to block suspicious traffic patterns
+
+---
+
+## Roadmap / To-Do
+
+1. **Load Testing Infrastructure**
+
+   - [ ] Set up k6 test environment
+   - [ ] Create baseline scripts for critical user journeys
+   - [ ] Build CI/CD pipeline for regular automated load tests
+
+2. **Performance Baseline**
+
+   - [ ] Establish initial performance metrics
+   - [ ] Identify and fix obvious bottlenecks
+   - [ ] Document baseline for future comparison
+
+3. **Auto-Scaling Configuration**
+
+   - [ ] Configure ECS/EKS auto-scaling rules
+   - [ ] Set up RDS read replica auto-scaling
+   - [ ] Test scaling behavior under load
+
+4. **Tenant Capacity Modeling**
+
+   - [ ] Create resource usage models by tenant tier
+   - [ ] Develop cost calculator for infrastructure planning
+   - [ ] Implement tenant usage monitoring
+
+5. **Traffic Management & Protection**
+
+   - [ ] Implement rate limiting by tenant tier
+   - [ ] Configure WAF rules and DDoS protection
+   - [ ] Test graceful degradation under extreme load
+
+6. **Documentation & Runbooks**
+   - [ ] Document capacity planning guidelines
+   - [ ] Create scaling runbooks for operations team
+   - [ ] Build tenant resource allocation calculator

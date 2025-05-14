@@ -1,0 +1,426 @@
+---
+description: Load testing methodologies and capacity planning
+globs: "infrastructure/**/*"
+alwaysApply: false
+---
+
+# Load Testing & Capacity Planning
+
+This document outlines the methodologies for load testing and capacity planning to ensure our multi-tenant e-commerce platform can handle expected traffic and scale appropriately.
+
+## Load Testing Strategy
+
+### Test Types
+
+1. **Baseline Performance Tests**
+   * Constant load at expected normal traffic
+   * Steady request rate for extended periods
+   * Measure baseline response times and resource usage
+   * Establish performance benchmarks
+
+2. **Stress Tests**
+   * Incrementally increasing load until failure
+   * Identify breaking points and bottlenecks
+   * Determine maximum capacity under controlled conditions
+   * Uncover failure modes under extreme pressure
+
+3. **Spike Tests**
+   * Sudden increase in traffic (10x normal)
+   * Simulate flash sales or marketing events
+   * Measure recovery time after traffic surge
+   * Validate auto-scaling effectiveness
+
+4. **Endurance Tests**
+   * Sustained moderate load (24+ hours)
+   * Identify memory leaks and resource exhaustion
+   * Validate system stability over time
+   * Test background processes under continuous load
+
+5. **Scalability Tests**
+   * Measure performance as resources increase
+   * Validate horizontal scaling effectiveness
+   * Determine optimal scaling triggers
+   * Create scaling efficiency metrics
+
+### Testing Tools
+
+1. **Primary Tool: k6**
+   * JavaScript-based scenarios
+   * Configurable virtual users and rates
+   * Detailed metrics collection
+   * CI/CD integration
+
+2. **Complementary Tools**
+   * JMeter for complex UI workflows
+   * Locust for Python-based scenarios
+   * Gatling for real-time reporting
+   * Artillery for serverless load generation
+
+3. **Distributed Load Generation**
+   * Multi-region test orchestration
+   * Realistic geographic distribution
+   * Cloud-based test nodes
+   * Coordinate with realistic client profiles
+
+### Test Implementation
+
+1. **Scenario Design**
+   * Create realistic user journeys
+   * Weight scenarios by frequency
+   * Implement think time between actions
+   * Support dynamic data generation
+
+2. **Example k6 Script**
+   ```javascript
+   import http from 'k6/http';
+   import { sleep, check } from 'k6';
+   
+   export const options = {
+     stages: [
+       { duration: '5m', target: 100 }, // Ramp up to 100 users
+       { duration: '10m', target: 100 }, // Stay at 100 users
+       { duration: '5m', target: 200 }, // Ramp up to 200 users
+       { duration: '10m', target: 200 }, // Stay at 200 users
+       { duration: '5m', target: 0 }, // Ramp down to 0 users
+     ],
+     thresholds: {
+       'http_req_duration': ['p(95)<500'], // 95% of requests must complete within 500ms
+       'http_req_failed': ['rate<0.01'], // Error rate must be less than 1%
+     },
+   };
+   
+   // Simulate a browsing user
+   export default function() {
+     // Home page
+     let res = http.get('https://ecommerce.example.com/');
+     check(res, { 'homepage status is 200': (r) => r.status === 200 });
+     sleep(3);
+     
+     // Category browsing
+     res = http.get('https://ecommerce.example.com/category/electronics');
+     check(res, { 'category page status is 200': (r) => r.status === 200 });
+     sleep(2);
+     
+     // Product detail
+     res = http.get('https://ecommerce.example.com/product/smartphone-x1');
+     check(res, { 'product page status is 200': (r) => r.status === 200 });
+     sleep(5);
+     
+     // Add to cart
+     res = http.post('https://ecommerce.example.com/api/cart/add', 
+       JSON.stringify({ productId: 'smartphone-x1', quantity: 1 }),
+       { headers: { 'Content-Type': 'application/json' } }
+     );
+     check(res, { 'add to cart status is 200': (r) => r.status === 200 });
+     sleep(1);
+     
+     // View cart
+     res = http.get('https://ecommerce.example.com/cart');
+     check(res, { 'cart page status is 200': (r) => r.status === 200 });
+     sleep(3);
+   }
+   ```
+
+3. **CI/CD Integration**
+   * Automated performance tests in pipeline
+   * Run tests after deployment to staging
+   * Fail pipeline on performance regression
+   * Store historical results for trending
+
+## Performance Metrics & Targets
+
+### Key Metrics
+
+1. **Response Time**
+   * **API Endpoints**: 
+     * p50 < 100ms
+     * p95 < 300ms
+     * p99 < 500ms
+   * **Page Loads**:
+     * p50 < 1s
+     * p95 < 2.5s
+     * p99 < 4s
+   * **Database Queries**:
+     * p50 < 50ms
+     * p95 < 200ms
+     * p99 < 500ms
+
+2. **Throughput**
+   * Target RPS by endpoint type:
+     * Read endpoints: 1000+ RPS
+     * Write endpoints: 200+ RPS
+     * Search endpoints: 100+ RPS
+   * Target transactions per second (TPS):
+     * Orders: 50+ TPS peak
+     * User registrations: 20+ TPS peak
+     * Product updates: 100+ TPS peak
+
+3. **Resource Utilization**
+   * CPU: < 70% sustained
+   * Memory: < 80% sustained
+   * Network: < 70% of available bandwidth
+   * Database connections: < 80% of pool
+   * Disk I/O: < 70% of provisioned IOPS
+
+4. **Error Rates**
+   * Overall error rate: < 0.1%
+   * 5xx errors: < 0.01%
+   * Timeout rate: < 0.05%
+   * Failed transactions: < 0.01%
+
+### Test Scenarios
+
+1. **Critical User Journeys**
+   * Product browsing and search
+   * Checkout flow
+   * User registration and login
+   * Order history and details
+   * Admin operations
+
+2. **Business-Critical Operations**
+   * Payment processing
+   * Inventory updates
+   * Order fulfillment
+   * Real-time pricing updates
+   * Search indexing
+
+3. **Background Processes**
+   * Report generation
+   * Email sending
+   * Order processing
+   * Data exports/imports
+   * Scheduled tasks
+
+## Capacity Planning
+
+### Resource Modeling
+
+1. **Traffic Projections**
+   * Historical traffic patterns
+   * Seasonal variations
+   * Marketing events impact
+   * Growth projections by tenant tier
+   * Multi-year scaling plan
+
+2. **Resource Requirements**
+   * CPU/Memory per request type
+   * Database IOPS per transaction
+   * Network bandwidth per user
+   * Storage growth projections
+   * Cache memory requirements
+
+3. **Scaling Factors**
+   * Tenant count scaling
+   * Product catalog size impact
+   * Order volume correlation
+   * Concurrent user multipliers
+   * Feature usage patterns
+
+### Tenant Sizing Tiers
+
+1. **Small Tenant Profile**
+   * Up to 1,000 products
+   * Peak traffic: 100 concurrent users
+   * Order volume: 50/day
+   * Storage needs: 5 GB
+   * Resource allocation: 0.5 CPU, 1 GB RAM per service
+
+2. **Medium Tenant Profile**
+   * Up to 10,000 products
+   * Peak traffic: 500 concurrent users
+   * Order volume: 500/day
+   * Storage needs: 20 GB
+   * Resource allocation: 1 CPU, 2 GB RAM per service
+
+3. **Large Tenant Profile**
+   * Up to 100,000 products
+   * Peak traffic: 2,000 concurrent users
+   * Order volume: 5,000/day
+   * Storage needs: 100 GB
+   * Resource allocation: 2 CPU, 4 GB RAM per service
+
+4. **Enterprise Tenant Profile**
+   * 100,000+ products
+   * Peak traffic: 10,000+ concurrent users
+   * Order volume: 20,000+/day
+   * Storage needs: 500+ GB
+   * Resource allocation: Custom
+
+### Infrastructure Scaling Rules
+
+1. **Compute Scaling**
+   * Trigger horizontal scaling at 70% CPU utilization
+   * Scale up instance size when scaling out reaches limits
+   * Maintain minimum 2 instances per service for redundancy
+   * Scale based on 15-minute average metrics
+   * Example auto-scaling configuration:
+     ```terraform
+     resource "aws_appautoscaling_target" "service_autoscaling" {
+       max_capacity       = 20
+       min_capacity       = 2
+       resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.app.name}"
+       scalable_dimension = "ecs:service:DesiredCount"
+       service_namespace  = "ecs"
+     }
+     
+     resource "aws_appautoscaling_policy" "service_cpu" {
+       name               = "cpu-autoscaling"
+       policy_type        = "TargetTrackingScaling"
+       resource_id        = aws_appautoscaling_target.service_autoscaling.resource_id
+       scalable_dimension = aws_appautoscaling_target.service_autoscaling.scalable_dimension
+       service_namespace  = aws_appautoscaling_target.service_autoscaling.service_namespace
+     
+       target_tracking_scaling_policy_configuration {
+         target_value       = 70.0
+         scale_in_cooldown  = 300
+         scale_out_cooldown = 60
+     
+         predefined_metric_specification {
+           predefined_metric_type = "ECSServiceAverageCPUUtilization"
+         }
+       }
+     }
+     ```
+
+2. **Database Scaling**
+   * Implement read replicas for read-heavy workloads
+   * Increase instance size for write-heavy workloads
+   * Consider horizontal sharding for very large datasets
+   * Schedule scaling operations during low-traffic periods
+   * Monitor connection utilization and query performance
+
+3. **Caching Strategy**
+   * Implement multiple cache layers:
+     * Browser caching for static assets
+     * CDN for public content
+     * Application cache for computed results
+     * Database query cache
+   * Size Redis clusters based on key count and size
+   * Set appropriate TTL by data type
+   * Implement cache warming for critical paths
+
+## Traffic Management
+
+### Rate Limiting
+
+1. **Tenant-Based Limits**
+   * Enforce API rate limits by tenant tier
+   * Scale limits with tenant subscription level
+   * Implement soft and hard limits
+   * Provide rate limit headers for transparency
+
+2. **Implementation**
+   * Use Redis for distributed rate limiting
+   * Implement token bucket algorithm
+   * Configure per-route and per-tenant limits
+   * Example middleware implementation:
+     ```typescript
+     // Rate limiting middleware
+     export class RateLimitMiddleware implements NestMiddleware {
+       constructor(
+         private readonly redisService: RedisService,
+         private readonly tenantService: TenantService,
+       ) {}
+     
+       async use(req: Request, res: Response, next: NextFunction) {
+         const tenantId = req.headers['x-tenant-id'] as string;
+         
+         if (!tenantId) {
+           return next();
+         }
+         
+         // Get tenant tier limits
+         const tenant = await this.tenantService.findById(tenantId);
+         const limit = this.getLimitByTier(tenant.tier);
+         const window = 60; // 1 minute window
+         
+         // Create Redis key
+         const key = `ratelimit:${tenantId}:${Math.floor(Date.now() / 1000 / window)}`;
+         
+         // Increment counter
+         const current = await this.redisService.incr(key);
+         
+         // Set expiry on first request
+         if (current === 1) {
+           await this.redisService.expire(key, window);
+         }
+         
+         // Set headers
+         res.setHeader('X-RateLimit-Limit', limit);
+         res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - current));
+         
+         // Check if over limit
+         if (current > limit) {
+           return res.status(429).json({
+             statusCode: 429,
+             error: 'Too Many Requests',
+             message: 'Rate limit exceeded',
+           });
+         }
+         
+         next();
+       }
+       
+       private getLimitByTier(tier: string): number {
+         switch (tier) {
+           case 'enterprise':
+             return 10000;
+           case 'professional':
+             return 3000;
+           case 'basic':
+           default:
+             return 1000;
+         }
+       }
+     }
+     ```
+
+3. **Graceful Degradation**
+   * Implement circuit breakers for overloaded services
+   * Serve cached content during high load
+   * Disable non-critical features progressively
+   * Prioritize critical business operations
+
+### DDoS Protection
+
+1. **Edge Protection**
+   * Implement AWS Shield or similar service
+   * Configure WAF rules to block attack patterns
+   * Use CDN to absorb traffic
+   * Implement bot protection measures
+
+2. **Application Protection**
+   * Validate all input data
+   * Implement request timeout limits
+   * Monitor for abnormal traffic patterns
+   * Create alerting for sudden traffic spikes
+
+3. **Response Plan**
+   * Document DDoS mitigation procedures
+   * Define escalation paths
+   * Create communication templates
+   * Test response procedures regularly
+
+## Monitoring & Analysis
+
+1. **Performance Dashboards**
+   * Real-time service metrics
+   * Resource utilization tracking
+   * Response time breakdowns
+   * Error rate monitoring
+   * Business KPI correlation
+
+2. **Capacity Analysis**
+   * Weekly capacity review
+   * Monthly growth projection updates
+   * Quarterly scaling plan revisions
+   * Long-term infrastructure roadmap
+
+3. **Continuous Optimization**
+   * Performance regression detection
+   * Regular database query analysis
+   * Caching effectiveness review
+   * Resource right-sizing evaluations
+   * Cost vs. performance optimization
+
+By following these load testing and capacity planning methodologies, we ensure our platform can scale reliably to meet tenant needs while maintaining performance targets.

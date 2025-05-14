@@ -1,0 +1,172 @@
+# Frontend Notes
+
+## Tech Stack & Conventions
+
+- **Next.js (v14+) + TypeScript**
+
+  - File-based routing via the `app` (or `pages`) directory.
+  - Enable strict TS in `tsconfig.json` (`"strict": true`).
+  - Leverage SSR/SSG/ISR: use `getServerSideProps`, `getStaticProps`, and `revalidate`.
+  - Sanitize all user input; avoid `dangerouslySetInnerHTML` to prevent XSS.
+
+- **Tailwind CSS**
+
+  - Configure theme tokens (colors, spacing, fonts) in `tailwind.config.js`.
+  - Purge unused classes in production builds.
+  - Use utility classes in JSX; extract repeated patterns with `@apply`.
+  - Support dynamic theming by injecting CSS variables per tenant.
+
+- **React Query**
+
+  - Wrap with `<QueryClientProvider>` at root.
+  - Use `useQuery` for GET data, `useMutation` for writes.
+  - Set sensible `staleTime` & `cacheTime` to balance freshness and performance.
+  - Centralize error handling with an Error Boundary or a global toast.
+
+- **Authentication**
+
+  - NextAuth.js or custom JWT solution.
+  - Store tokens in secure, HttpOnly cookies.
+  - Protect server-rendered routes in `getServerSideProps`.
+  - Implement CSRF tokens on all mutating requests.
+
+- **Tooling & Linting**
+
+  - ESLint with TypeScript rules + Prettier for formatting.
+  - Husky + lint-staged for pre-commit checks.
+  - Dependabot or Renovate for dependency updates.
+  - SWC/ESBuild for fast builds and minification.
+
+## Security & Best Practices
+
+- **XSS Prevention**: sanitize or disallow HTML injection.
+- **CSRF Protection**: enforce and validate tokens on form submissions.
+- **Content Security Policy**: configure headers to restrict script sources.
+- **Secure Cookies**: `Secure`, `HttpOnly`, `SameSite=Strict` flags.
+- **Dependency Audits**: run `npm audit`/`yarn audit` regularly.
+- **Code Splitting**: dynamic imports to keep initial bundle small.
+- **Accessibility**: use semantic HTML, ARIA labels, and keyboard navigation.
+
+## Accessibility Standards
+
+- **WCAG 2.1 AA Compliance** as minimum target for all tenant storefronts.
+- **Testing Tools**:
+  - Automated: Axe, Lighthouse, WAVE.
+  - Manual: Screen reader testing (NVDA, VoiceOver) quarterly.
+- **Core Requirements**:
+  - Keyboard navigation for all interactions.
+  - Focus management for modals and dynamic content.
+  - Color contrast ratio minimum 4.5:1 for normal text.
+  - Semantic HTML5 elements for proper document structure.
+  - Form field labels and error messaging.
+- **Documentation**:
+  - Provide accessibility guidelines for custom tenant components.
+  - Include ARIA best practices in component documentation.
+
+## Performance Requirements
+
+- **Core Web Vitals Targets**:
+  - LCP (Largest Contentful Paint): < 2.5s
+  - FID (First Input Delay): < 100ms
+  - CLS (Cumulative Layout Shift): < 0.1
+- **Additional Metrics**:
+  - TTI (Time to Interactive): < 3.5s on mid-range mobile
+  - First paint: < 1s on 4G connection
+- **Optimizations**:
+  - Critical CSS extraction for above-the-fold content
+  - Lazy loading for below-fold images and components
+  - Bundle size budget: < 200KB for initial JS (compressed)
+  - Preload critical fonts and hero images
+
+## SEO & Mobile Strategy
+
+- **SEO Requirements**:
+
+  - Server-side rendering for all product and category pages
+  - Dynamic metadata generation based on page content
+  - Structured data (JSON-LD) for products, breadcrumbs, and organization
+  - Canonical URL implementation for multi-view pages
+  - Automated sitemap generation per tenant
+
+- **Mobile Experience**:
+  - Mobile-first design approach for all components
+  - Progressive Web App (PWA) capabilities:
+    - Service worker for offline catalog browsing
+    - App manifest for home screen installation
+    - Cache API for product images and assets
+  - Touch-friendly UI elements (min tap target size: 44×44px)
+  - Responsive images with srcset and WebP/AVIF formats
+
+---
+
+# Gameplan
+
+1. **Project Setup**
+
+   - `npx create-next-app --typescript`
+   - Install & configure Tailwind CSS.
+   - Integrate ESLint, Prettier, Husky, lint-staged.
+
+2. **Global Layout**
+
+   - Build `Layout` component (Sidebar + Topbar).
+   - Add global CSS reset and theme provider.
+
+3. **Authentication Flow**
+
+   - Implement NextAuth or JWT.
+   - Create Login & Logout pages.
+   - Protect dashboard routes with server-side checks.
+
+4. **Home Page**
+
+   - Public landing with links to Login or demo.
+   - Authenticated users auto-redirected to `/dashboard`.
+
+5. **Product Listing**
+
+   - `/products` route.
+   - Fetch product list via React Query.
+   - Display cards: image, name, price, "View" button.
+
+6. **Product Details**
+
+   - Dynamic route `/products/[id]`.
+   - SSR fetch product by ID.
+   - Show image gallery, description, price, "Add to Cart".
+
+7. **Core UI Components**
+
+   - Buttons, Inputs, Cards, Badges.
+   - Chart wrapper (e.g. Recharts/Chart.js) for analytics.
+
+8. **State Management Hooks**
+
+   - `useProducts`, `useProduct`, `useCart` using React Query.
+
+9. **Dynamic Theming**
+
+   - Load tenant theme config from API.
+   - Apply via CSS variables and Tailwind overrides.
+
+10. **Testing**
+
+    - Setup Jest + React Testing Library.
+    - Write unit tests for critical components and hooks.
+
+11. **CI/CD**
+
+    - GitHub Actions: lint → test → build → deploy previews.
+    - Configure Vercel/ECS pipeline.
+
+12. **Performance & SEO**
+
+    - Analyze bundles, remove unused libs.
+    - Add default meta tags & Open Graph.
+
+13. **Accessibility Audit**
+
+    - Run axe or Lighthouse.
+    - Fix any a11y issues.
+
+---

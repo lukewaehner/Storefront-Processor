@@ -1,0 +1,347 @@
+---
+description: Disaster recovery procedures and business continuity planning
+globs: "infrastructure/**/*"
+alwaysApply: false
+---
+
+# Disaster Recovery & Business Continuity
+
+This document outlines the disaster recovery procedures and business continuity planning for our multi-tenant e-commerce platform.
+
+## Recovery Objectives
+
+### Recovery Targets
+
+1. **Recovery Time Objective (RTO)**
+   * **Critical Services**: 4 hours
+     * Storefront
+     * Checkout
+     * Order processing
+     * Authentication
+   * **Important Services**: 24 hours
+     * Admin dashboard
+     * Analytics
+     * Reporting
+     * Search
+   * **Non-Critical Services**: 48 hours
+     * Batch processing
+     * Historical data access
+     * Non-essential integrations
+
+2. **Recovery Point Objective (RPO)**
+   * **Critical Data**: 15 minutes
+     * Orders
+     * Customer accounts
+     * Payments
+     * Product catalog
+   * **Important Data**: 1 hour
+     * Analytics
+     * Inventory updates
+     * Content changes
+   * **Non-Critical Data**: 24 hours
+     * Reports
+     * Logs
+     * Historical records
+
+3. **Service Level Agreement (SLA)**
+   * Define degraded service parameters during recovery
+   * Set customer communication timelines
+   * Document compensation policies
+
+## Backup Strategy
+
+### Database Backups
+
+1. **PostgreSQL Backup Configuration**
+   * Automated daily RDS snapshots
+   * Point-in-time recovery with transaction logs
+   * Retention: 30 days for daily backups, 1 year for monthly
+   * Cross-region replication for critical databases
+
+2. **Backup Procedures**
+   * Automated snapshots via AWS RDS
+   * Logical backups for selective restore capabilities
+   * Encrypted backups with KMS
+   * Immutable backup copies for ransomware protection
+
+3. **Verification & Testing**
+   * Weekly automated restore tests
+   * Monthly selective data recovery tests
+   * Quarterly full database restore exercises
+   * Validation of data integrity post-restore
+
+### File & Object Storage
+
+1. **S3 Configuration**
+   * Versioning enabled for all buckets
+   * Cross-region replication for critical data
+   * Lifecycle policies for archiving older versions
+   * Object lock for compliance requirements
+
+2. **CDN Assets**
+   * Origin redundancy for CloudFront
+   * Backup origin configurations
+   * Cached content strategy during recovery
+   * Alternative CDN provider as contingency
+
+3. **User-Generated Content**
+   * Regular synchronization to backup location
+   * Metadata backup for rapid recovery
+   * Prioritization tiers for restoration
+   * Tenant isolation during recovery
+
+### Configuration & Code
+
+1. **Infrastructure as Code**
+   * All infrastructure defined in Terraform
+   * Version-controlled configurations
+   * Regular export of external configurations
+   * Documentation of manual settings
+
+2. **Secrets Management**
+   * Backup of encryption keys
+   * Secure export procedures for credentials
+   * Key rotation procedures post-recovery
+   * Alternative authentication mechanisms
+
+3. **Application Code**
+   * Git repositories with multiple remotes
+   * Protected branches for production code
+   * Deployment artifact archiving
+   * Build pipeline redundancy
+
+## Disaster Scenarios & Response
+
+### Scenario Planning
+
+1. **Infrastructure Failures**
+   * **Region Outage**:
+     * Failover to secondary region
+     * DNS updates via Route 53
+     * Data synchronization post-recovery
+   * **Availability Zone Failure**:
+     * Auto-scaling across remaining AZs
+     * Database failover to standby
+     * Load balancer health check updates
+
+2. **Data Corruption**
+   * **Database Corruption**:
+     * Point-in-time recovery from snapshots
+     * Transaction log replay to minimize loss
+     * Data reconciliation procedures
+   * **Application-Level Corruption**:
+     * Isolation of affected tenants
+     * Selective data restoration
+     * Audit log analysis for causation
+
+3. **Security Incidents**
+   * **Unauthorized Access**:
+     * Credential revocation procedures
+     * System isolation steps
+     * Evidence preservation process
+   * **Ransomware Attack**:
+     * Clean environment deployment
+     * Restoration from immutable backups
+     * Verification of system integrity
+
+### Recovery Procedures
+
+1. **Declaration & Escalation**
+   * Incident classification criteria
+   * Escalation paths and responsibilities
+   * Communication templates by scenario
+   * Stakeholder notification procedures
+
+2. **Response Team Structure**
+   * Incident Commander role
+   * Technical Lead responsibilities
+   * Communication Coordinator duties
+   * Executive Liaison position
+
+3. **Recovery Operations**
+   * Initial assessment checklist
+   * Service restoration priority matrix
+   * Data recovery procedures
+   * Validation and verification steps
+   * Post-recovery monitoring
+
+## Multi-Region Strategy
+
+### Active-Passive Configuration
+
+1. **Primary Region**
+   * All services active
+   * Primary database instances
+   * Full production traffic
+   * Continuous replication to secondary
+
+2. **Secondary Region**
+   * Minimal infrastructure running
+   * Database read-replicas
+   * Warm standby services
+   * Regular testing via synthetic traffic
+
+3. **Failover Process**
+   * Database promotion
+   * DNS record updates
+   * Scaling up standby services
+   * Configuration synchronization
+   * Example for database failover:
+     ```terraform
+     resource "aws_rds_cluster" "primary" {
+       cluster_identifier      = "aurora-cluster-primary"
+       engine                  = "aurora-postgresql"
+       availability_zones      = ["us-west-2a", "us-west-2b", "us-west-2c"]
+       database_name           = "ecommerce"
+       master_username         = "postgres"
+       master_password         = var.db_password
+       backup_retention_period = 7
+       preferred_backup_window = "07:00-09:00"
+       # Enable global database for cross-region replication
+       global_cluster_identifier = aws_rds_global_cluster.global.id
+     }
+     
+     resource "aws_rds_global_cluster" "global" {
+       global_cluster_identifier = "global-ecommerce-db"
+       engine                    = "aurora-postgresql"
+       engine_version            = "13.4"
+       database_name             = "ecommerce"
+     }
+     
+     # Secondary region replica
+     resource "aws_rds_cluster" "secondary" {
+       provider                  = aws.dr_region
+       cluster_identifier        = "aurora-cluster-secondary"
+       engine                    = "aurora-postgresql"
+       availability_zones        = ["us-east-1a", "us-east-1b", "us-east-1c"]
+       # Link to global cluster
+       global_cluster_identifier = aws_rds_global_cluster.global.id
+       # No master credentials for replica
+     }
+     ```
+
+### Active-Active Configuration (Future)
+
+1. **Multi-Region Architecture**
+   * Services running in all regions
+   * Intelligent traffic routing
+   * Data synchronization strategy
+   * Conflict resolution mechanisms
+
+2. **Data Consistency**
+   * Multi-master database considerations
+   * Eventual consistency patterns
+   * Write region determination
+   * Conflict resolution strategies
+
+3. **Global Load Balancing**
+   * Latency-based routing
+   * Health check integration
+   * Failover trigger mechanisms
+   * Traffic distribution policies
+
+## Testing & Validation
+
+### Regular Testing Schedule
+
+1. **Component-Level Testing**
+   * Weekly database restore tests
+   * Monthly object storage recovery tests
+   * Bi-monthly application deployment tests
+   * Quarterly network failover tests
+
+2. **Scenario-Based Testing**
+   * Simulated region failure (quarterly)
+   * Data corruption exercises (semi-annually)
+   * Full DR plan test (annually)
+   * Tabletop exercises for new scenarios
+
+3. **Testing Documentation**
+   * Test plan templates
+   * Success criteria definitions
+   * Failure analysis procedures
+   * Improvement tracking
+
+### Continuous Improvement
+
+1. **Post-Test Analysis**
+   * Review of recovery time performance
+   * Identification of bottlenecks
+   * Documentation of lessons learned
+   * Procedure updates based on findings
+
+2. **Incident Review**
+   * Post-incident analysis for actual events
+   * Root cause determination
+   * Prevention measures
+   * Recovery process improvements
+
+3. **Regular Plan Updates**
+   * Quarterly review of DR documentation
+   * Bi-annual update of recovery procedures
+   * Annual comprehensive plan revision
+   * Validation of updated procedures
+
+## Business Continuity
+
+### Critical Function Identification
+
+1. **Business Impact Analysis**
+   * Revenue impact by service
+   * Customer experience degradation
+   * Regulatory or compliance risks
+   * Reputational impact considerations
+
+2. **Alternative Procedures**
+   * Manual order processing fallbacks
+   * Offline payment processing options
+   * Alternative notification methods
+   * Temporary feature limitations
+
+3. **Recovery Sequence**
+   * Order of service restoration
+   * Dependencies and prerequisites
+   * Minimal viable product definition
+   * Phased recovery approach
+
+### Communication Plan
+
+1. **Internal Communication**
+   * Alert system for technical teams
+   * Executive briefing procedures
+   * Status update cadence
+   * Collaboration tools and backups
+
+2. **Customer Communication**
+   * Status page integration
+   * Automated notifications
+   * Support team briefings
+   * Tenant admin communications
+
+3. **External Stakeholders**
+   * Vendor notifications
+   * Regulatory reporting if required
+   * Partner communications
+   * Investor relations if significant
+
+### Training & Awareness
+
+1. **Team Preparation**
+   * Role-specific training
+   * Hands-on recovery exercises
+   * Documentation familiarity
+   * On-call procedures and rotations
+
+2. **Knowledge Management**
+   * Centralized recovery documentation
+   * Access during system outages
+   * Print copies of critical procedures
+   * Regular review and updates
+
+3. **Incident Response Simulation**
+   * Regular tabletop exercises
+   * Role-playing scenarios
+   * Cross-functional coordination
+   * Decision-making practice
+
+By implementing these disaster recovery and business continuity procedures, we ensure resilience and rapid recovery capability for our platform while minimizing impact to tenants.

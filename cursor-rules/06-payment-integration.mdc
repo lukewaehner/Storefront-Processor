@@ -1,0 +1,115 @@
+# Payments Integration Notes
+
+## General Conventions
+
+### Provider
+
+- **Primary**: Stripe Connect (supports platform fees, KYC, payouts)
+- **Alternative**: Square Connect for POS-centric workflows
+
+### Core Flows
+
+1. **Account Onboarding**
+   - Create Stripe Connected Account (Standard/Express)
+   - Redirect merchant to hosted onboarding (AccountLinks)
+2. **Payment Creation**
+   - Use `PaymentIntent` with `application_fee_amount` for platform fee
+   - Set `stripeAccount` header to route funds to connected account
+3. **Webhooks & Reconciliation**
+   - Listen for `payment_intent.succeeded`, `charge.refunded`, etc.
+   - Record gross, Stripe fee, platform fee, net payout
+4. **Payouts**
+   - Stripe auto-payouts on schedule; optionally display upcoming payout in dashboard
+
+### Compliance & Security
+
+- **PCI**: use Stripe Elements on frontend; never store raw card data
+- **Webhook Verification**: validate signatures on all incoming events
+- **Retry Logic**: idempotent handlers with deduplication keys
+- **Audit Logs**: record all payment events with `tenant_id`, `order_id`
+
+### Fee Reporting
+
+- **Fields to Store**:
+  - `amount` (gross)
+  - `stripe_fee`
+  - `application_fee` (platform)
+  - `net_amount`
+- **Dashboard**: aggregate fees by day/week/month per tenant and platform
+
+## International Payment Processing
+
+- **Multi-Currency Support:**
+
+  - Support for 135+ global currencies with real-time exchange rates.
+  - Store prices in merchant's base currency with optional display currency conversion.
+  - Handle currency conversion fees and display to customers.
+
+- **Regional Payment Methods:**
+
+  - Europe: SEPA Direct Debit, Sofort, iDEAL, Bancontact.
+  - Asia: Alipay, WeChat Pay, PayPay, GrabPay.
+  - Latin America: Boleto, Oxxo, Mercado Pago.
+  - Configure available methods by customer location.
+
+- **Tax Calculation & Compliance:**
+
+  - Integrate with TaxJar/Avalara for real-time tax calculations.
+  - Support VAT, GST, sales tax based on customer/merchant locations.
+  - Generate tax-compliant receipts and invoices with required fields by region.
+
+- **Cross-Border Considerations:**
+  - Handle international address formats and validation.
+  - Support duty/customs pre-collection where required.
+  - Implement GDPR-compliant data handling for EU transactions.
+
+---
+
+## Roadmap / To-Do
+
+1. **Onboarding Module**
+
+   - [ ] Implement API endpoint to create connected accounts
+   - [ ] Integrate Stripe AccountLinks flow
+   - [ ] Store and refresh account status
+
+2. **Checkout Integration**
+
+   - [ ] Abstract `PaymentProvider` interface
+   - [ ] Implement Stripe adapter for `createPaymentIntent`
+   - [ ] Test in Stripe test mode with sample cards
+
+3. **Webhook Handler**
+
+   - [ ] Secure endpoint with signature verification
+   - [ ] Parse and persist relevant events (success, failure, refund)
+   - [ ] Implement retry/backoff for transient errors
+
+4. **Dashboard & Reporting**
+
+   - [ ] Build service to aggregate fee data per tenant
+   - [ ] Expose admin endpoints for fee summaries
+   - [ ] Create frontend charts for platform vs. store revenue
+
+5. **Compliance & Testing**
+
+   - [ ] Enforce HTTPS and HSTS on all payment routes
+   - [ ] Write integration tests against Stripe's webhook simulator
+   - [ ] Schedule periodic audit to verify no raw card data is logged
+
+6. **Multi-Currency Support**
+
+   - [ ] Implement currency conversion service with configurable markup
+   - [ ] Add display currency preference to user profiles
+   - [ ] Create admin interface for currency settings
+
+7. **Alternative Payment Methods**
+
+   - [ ] Research and prioritize regional payment methods
+   - [ ] Integrate with top 3-5 regional methods
+   - [ ] Build framework for easy addition of new payment methods
+
+8. **Tax Integration**
+   - [ ] Evaluate and select tax calculation provider
+   - [ ] Implement real-time tax calculation during checkout
+   - [ ] Build compliant invoicing system with tax breakdown

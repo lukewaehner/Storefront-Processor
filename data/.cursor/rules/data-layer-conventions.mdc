@@ -1,0 +1,184 @@
+---
+description: Data layer architecture and implementation guidelines
+globs: "data/**/*"
+alwaysApply: true
+---
+
+# Data Layer Conventions
+
+This document outlines the implementation details for the data layer of our multi-tenant e-commerce platform, focusing on data modeling, access patterns, and persistence.
+
+## Database Technology
+
+1. **Primary Database**
+   * PostgreSQL (v14+) for relational data
+   * Schema-based or row-based multi-tenancy
+   * PostGIS extensions for location data
+   * Connection pooling via pgBouncer
+
+2. **Caching Layer**
+   * Redis for distributed caching
+   * Cache invalidation based on entity events
+   * Configurable TTL by entity type
+   * Support for nested cache dependencies
+
+3. **Search & Analytics**
+   * Elasticsearch for product search and analytics
+   * Synchronization via background workers
+   * Tenant-specific indices
+   * Query customization by tenant
+
+## Multi-Tenancy Implementation
+
+1. **Row-Level Multi-Tenancy**
+   * Add `tenantId` foreign key to all tenant-scoped entities
+   * Create database constraint for tenant isolation
+   * Include tenant filter in all queries
+   * Use RLS (Row Level Security) as additional protection
+
+2. **Query Isolation**
+   * Implement `TenantAwareRepository` base class
+   * Automatically inject tenant context in queries
+   * Validate tenant access for all operations
+   * Support explicit cross-tenant queries with audit logging
+
+3. **Shared vs. Tenant-Specific Data**
+   * Distinguish between shared and tenant-specific entities
+   * Use inheritance patterns for shared base entities
+   * Implement tenant configuration overrides
+   * Create tenant-aware factories for entity creation
+
+## ORM & Query Layer
+
+1. **ORM Selection**
+   * Primary: Prisma for type-safe queries
+   * Alternative: TypeORM for complex inheritance scenarios
+   * Consistent use throughout the application
+   * Version control for schemas and migrations
+
+2. **Repository Pattern**
+   * Create repository interface for each entity
+   * Implement concrete repositories with ORM
+   * Centralize query logic and tenant filtering
+   * Support transaction propagation
+
+3. **Query Building**
+   * Type-safe query construction
+   * Standardize pagination, sorting, filtering
+   * Optimize for common access patterns
+   * Support for complex filtering conditions
+
+## Data Modeling
+
+1. **Entity Design**
+   * Follow database normalization principles
+   * Use UUID as primary key for all entities
+   * Include standard metadata fields:
+     * `createdAt`, `updatedAt`
+     * `createdBy`, `updatedBy` (user IDs)
+     * `version` for optimistic locking
+   * Add soft delete where appropriate (`deletedAt`)
+
+2. **Relationship Patterns**
+   * Define clear ownership in relationships
+   * Use foreign keys with appropriate constraints
+   * Implement cascade behaviors explicitly
+   * Consider performance implications of relationship fetching
+
+3. **Inheritance Strategies**
+   * Table-per-hierarchy (TPH) for simple variations
+   * Table-per-type (TPT) for complex entity hierarchies
+   * Interface implementation for behavior variations
+   * Avoid deep inheritance chains
+
+## Data Migrations
+
+1. **Migration Strategy**
+   * Use ORM migration tools (Prisma Migrate)
+   * Version control all migrations
+   * Test migrations with production-like data
+   * Support rollback procedures
+
+2. **Migration Safety**
+   * Implement non-breaking schema changes
+   * Use multiple deployments for complex migrations
+   * Maintain backward compatibility during transition
+   * Consider performance impact during migration
+
+3. **Data Transformation**
+   * Create data transformation jobs for complex migrations
+   * Run transformations in batches
+   * Validate data integrity before and after
+   * Provide progress tracking for long-running migrations
+
+## Performance Optimization
+
+1. **Indexing Strategy**
+   * Index foreign keys and frequent query fields
+   * Create compound indices for common query patterns
+   * Consider partial indices for filtered queries
+   * Regularly analyze and optimize indices
+
+2. **Query Optimization**
+   * Use query profiling tools
+   * Optimize N+1 query patterns
+   * Consider denormalization for read-heavy data
+   * Implement query caching for expensive operations
+
+3. **Connection Management**
+   * Configure appropriate connection pool size
+   * Monitor connection usage
+   * Implement connection timeout handling
+   * Release connections promptly after use
+
+## Data Security
+
+1. **Access Control**
+   * Implement role-based access at repository level
+   * Log sensitive data access
+   * Apply field-level security where needed
+   * Validate authorization for all operations
+
+2. **Data Encryption**
+   * Encrypt PII and sensitive data at rest
+   * Use field-level encryption for highly sensitive data
+   * Implement key rotation procedures
+   * Support anonymization for reporting
+
+3. **Audit Logging**
+   * Track all write operations
+   * Store previous and new values for changes
+   * Include actor information
+   * Support for compliance and forensic analysis
+
+## Technical Implementation
+
+1. **Core Components**
+   * `DatabaseModule`: Main module for database configuration
+   * `BaseRepository`: Abstract base for all repositories
+   * `TenantContextService`: Manages current tenant context
+   * `MigrationService`: Handles data migrations
+   * `QueryBuilder`: Utility for building complex queries
+
+2. **Directory Structure**
+   ```
+   data/
+   ├── prisma/
+   │   ├── schema.prisma       # Database schema
+   │   └── migrations/         # Generated migrations
+   ├── src/
+   │   ├── repositories/       # Entity repositories
+   │   ├── models/             # Shared data models
+   │   ├── services/           # Data-related services
+   │   └── utils/              # Query utilities
+   ├── seeds/                  # Seed data scripts
+   └── migrations/             # Custom migration scripts
+   ```
+
+3. **Database Schema Organization**
+   * Group related entities (e.g., `catalog`, `orders`, `users`)
+   * Consistent naming conventions
+   * Clear comments for complex relationships
+   * Indexed views for common query patterns
+
+By following these data layer conventions, we ensure consistent, secure, and efficient data access throughout the platform while maintaining proper multi-tenant isolation.

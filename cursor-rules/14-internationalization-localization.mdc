@@ -1,0 +1,113 @@
+# Internationalization & Localization Notes
+
+## General Conventions
+
+### Translation & Localization
+
+- **Framework**: react-i18next (frontend) and i18next (backend)
+- **Structure**:
+  - Translation files in JSON format
+  - Namespace by feature area (`common`, `checkout`, `admin`, etc.)
+  - Support pluralization and context-specific translations
+- **Default Language**: English (en-US)
+- **Initial Target Languages**:
+  - Spanish (es)
+  - French (fr)
+  - German (de)
+  - Japanese (ja)
+  - Chinese Simplified (zh-CN)
+
+### Translation Management
+
+- **Workflow**:
+  - Extract strings from code using i18next-parser
+  - Store translations in a TMS (Phrase, Lokalise, or Crowdin)
+  - Sync translations via API during build process
+- **Variables**:
+  - Use named placeholders (`{{variable}}`) for better translator context
+  - Include comments for translators on ambiguous strings
+- **Updates**:
+  - Version translation files with application releases
+  - Flag missing translations in staging environment
+
+### Regional Considerations
+
+- **Date & Time**:
+  - Use ISO formats in database (UTC timestamps)
+  - Format dates/times client-side based on locale
+  - Support 12/24 hour time based on locale preference
+- **Numbers & Currency**:
+  - Store monetary values as integers (cents/lowest denomination)
+  - Format with appropriate decimal/thousands separators by locale
+  - Display appropriate currency symbols/positions
+- **Address Formats**:
+  - Support country-specific address fields
+  - Validate postal codes with country-specific regex
+  - Allow proper input of international phone numbers
+
+### Right-to-Left (RTL) Support
+
+- **Layout**:
+  - Use CSS logical properties (`margin-inline-start` vs `margin-left`)
+  - Test layouts with RTL languages (Arabic, Hebrew)
+  - Ensure iconography works with RTL layouts
+- **Text Flow**:
+  - Set appropriate `dir` attribute based on language
+  - Handle bidirectional text properly
+
+## Tax & Regulatory Compliance
+
+- **VAT Handling**:
+  - Support VAT registration number collection and validation
+  - Calculate VAT based on customer/merchant location
+  - Generate VAT-compliant invoices
+- **Regional Regulations**:
+  - GDPR for EU customers
+  - CCPA for California customers
+  - Australian Consumer Law requirements
+  - Support required legal text by region
+
+---
+
+## Roadmap / To-Do
+
+1. **Translation Infrastructure**
+
+   - [ ] Set up i18next in frontend and backend
+   - [ ] Create base translation files (en-US)
+   - [ ] Configure extraction and syncing with translation management system
+
+2. **Localization Components**
+
+   - [ ] Implement locale selector in header
+   - [ ] Create global date/time/number formatting utilities
+   - [ ] Build address form components with country-specific fields
+
+3. **RTL Support**
+
+   - [ ] Test and fix layout with RTL languages
+   - [ ] Ensure proper text flow and bidirectional text handling
+   - [ ] Update iconography and UI elements for RTL support
+
+4. **Regional Tax Handling**
+
+   - [ ] Integrate tax calculation service
+   - [ ] Build tax settings UI for merchants
+   - [ ] Create compliant invoice templates by region
+
+5. **Multi-Currency**
+
+   - [ ] Implement currency conversion service
+   - [ ] Add display currency preferences to user settings
+   - [ ] Create currency selector for storefronts
+
+6. **Compliance Documentation**
+
+   - [ ] Draft templates for regional legal requirements
+   - [ ] Create implementation guide for tenant-specific legal text
+   - [ ] Document compliance requirements by region
+
+7. **Testing & Quality Assurance**
+   - [ ] Set up automated tests for i18n coverage
+   - [ ] Create visual regression tests for RTL layouts
+   - [ ] Establish translation quality review process

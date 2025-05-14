@@ -1,0 +1,125 @@
+---
+description: SEO best practices for frontend implementation
+globs: "frontend/**/*"
+alwaysApply: false
+---
+
+# SEO Best Practices
+
+Search Engine Optimization is critical for tenant storefronts to gain visibility and attract organic traffic. These guidelines ensure our platform follows SEO best practices.
+
+## Technical SEO Requirements
+
+### Rendering & Indexability
+
+1. **Server-Side Rendering**
+   * Use SSR for all indexable pages
+   * Ensure complete HTML is delivered in initial response
+   * Implement ISR (Incremental Static Regeneration) for catalog pages
+
+2. **Status Codes**
+   * Return appropriate HTTP status codes (200, 301, 404, 5xx)
+   * Implement proper redirect handling (301 for permanent, 302 for temporary)
+   * Ensure proper error page implementation
+
+3. **Crawlability**
+   * Generate proper robots.txt with tenant-specific rules
+   * Implement XML sitemaps with prioritization
+   * Update sitemaps when content changes
+   * Monitor and fix crawl errors
+
+### Performance
+
+1. **Page Speed**
+   * Follow platform performance targets (see Performance document)
+   * Optimize Core Web Vitals as ranking factors
+   * Implement mobile-first optimizations
+
+2. **Mobile Friendliness**
+   * Ensure responsive design across all viewports
+   * Pass Google's Mobile-Friendly Test
+   * Implement tap targets of appropriate size (minimum 48x48px)
+
+## On-Page SEO Elements
+
+### Metadata
+
+1. **Title Tags**
+   * Unique, descriptive titles for each page
+   * Follow format: `Primary Keyword | Secondary Keyword | Brand Name`
+   * Keep under 60 characters
+   * Include tenant's primary keywords
+
+2. **Meta Descriptions**
+   * Unique descriptions for each page
+   * Include relevant keywords naturally
+   * Keep under 155 characters
+   * Include call-to-action where appropriate
+
+3. **Heading Structure**
+   * Implement logical heading hierarchy (H1 → H6)
+   * Single H1 per page, containing primary keyword
+   * Use H2s for major sections, H3s for subsections
+   * Include keywords in headings naturally
+
+### Content Optimization
+
+1. **URL Structure**
+   * Clean, readable URLs with hyphens as separators
+   * Include relevant keywords
+   * Keep URLs concise and descriptive
+   * Implement consistent URL patterns by content type
+
+2. **Image Optimization**
+   * Descriptive, keyword-rich filenames
+   * Complete alt text for all images
+   * Responsive images with proper dimensions
+   * Compress images for fast loading
+
+3. **Internal Linking**
+   * Implement logical site structure
+   * Use descriptive anchor text
+   * Include breadcrumbs with structured data
+   * Link to related products and categories
+
+## Structured Data
+
+1. **Schema.org Implementation**
+   * Product schema for product pages
+   * BreadcrumbList for navigation paths
+   * Organization schema for brand information
+   * Review/Rating schema for product reviews
+   * FAQPage for FAQ sections
+
+2. **Implementation Method**
+   * Use JSON-LD format (preferred over microdata)
+   * Place in the `<head>` or at end of `<body>`
+   * Test implementation with Google's Structured Data Testing Tool
+
+## Analytics & Monitoring
+
+1. **Tracking Implementation**
+   * Configure Google Analytics / Tag Manager
+   * Set up Search Console for each tenant domain
+   * Track key e-commerce metrics and conversions
+
+2. **Regular Auditing**
+   * Monitor keyword rankings
+   * Track organic traffic and conversions
+   * Identify and fix technical SEO issues
+   * Analyze competitor performance
+
+## Multi-Tenant Considerations
+
+1. **Domain Strategy**
+   * Support custom domains for tenants
+   * Implement proper canonicalization
+   * Avoid duplicate content across tenant stores
+
+2. **Tenant-Specific SEO**
+   * Allow tenants to customize metadata
+   * Provide SEO recommendations in admin UI
+   * Generate tenant-specific sitemaps
+   * Support tenant-specific Google Search Console verification
+
+These SEO best practices ensure that tenant storefronts are optimized for search engine visibility and organic traffic growth.

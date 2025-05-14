@@ -1,0 +1,38 @@
+# Third-Party Integrations Notes
+
+## General Conventions
+
+### Email Service
+- **Providers**: SendGrid, AWS SES, or Mailgun  
+- **Patterns**: transactional vs. marketing emails separated by domain/subaccount  
+- **Templates**: use Handlebars or MJML for dynamic content  
+- **Webhooks**: handle bounces, complaints, unsubscribes
+
+### SMS & Notifications
+- **Providers**: Twilio or AWS SNS  
+- **Flows**: OTP for login, order status SMS, marketing blasts  
+- **Error Handling**: log failures and retry with exponential backoff
+
+### Accounting / ERP Sync (Future)
+- **Targets**: QuickBooks Online, Xero  
+- **Mode**: batch exports (daily sales summary) or real-time webhooks  
+- **Data Mapping**: orders → invoices; payouts → payments
+
+---
+
+## Roadmap / To-Do
+
+1. **Email Integration**  
+   - [ ] Select provider and set up subaccount  
+   - [ ] Build email service module with send & webhook endpoints  
+   - [ ] Create transactional templates (order receipt, password reset)
+
+2. **SMS Integration**  
+   - [ ] Provision Twilio number or SNS topic  
+   - [ ] Implement SMS service wrapper with retry & rate-limit  
+   - [ ] Add OTP flows for MFA + order updates
+
+3. **ERP Sync Prototype**  
+   - [ ] Sketch data mapping for orders and payouts  
+   - [ ] Implement export job (BullMQ) generating CSV/JSON  
+   - [ ] Plan real-time sync via accounting API webhooks

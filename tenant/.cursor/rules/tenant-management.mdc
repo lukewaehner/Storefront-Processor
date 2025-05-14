@@ -1,0 +1,1075 @@
+---
+description: Tenant management and lifecycle implementation details
+globs: "tenant/**/*"
+alwaysApply: true
+---
+
+# Tenant Management
+
+This document outlines the implementation details for tenant management, including tenant lifecycle, provisioning, and configuration in our multi-tenant e-commerce platform.
+
+## Tenant Data Model
+
+### Core Entities
+
+1. **Tenant**
+   * Schema definition:
+     ```prisma
+     model Tenant {
+       id                  String    @id @default(uuid())
+       name                String
+       slug                String    @unique
+       domains             Domain[]
+       plan                PlanType  @default(BASIC)
+       status              TenantStatus @default(ACTIVE)
+       createdAt           DateTime  @default(now())
+       updatedAt           DateTime  @updatedAt
+       expiresAt           DateTime?
+       billingId           String?
+       logoUrl             String?
+       primaryColor        String?
+       secondaryColor      String?
+       users               User[]
+       settings            TenantSettings?
+       features            TenantFeature[]
+     }
+     
+     enum PlanType {
+       BASIC
+       PROFESSIONAL
+       ENTERPRISE
+     }
+     
+     enum TenantStatus {
+       PROVISIONAL
+       ACTIVE
+       SUSPENDED
+       TERMINATED
+     }
+     ```
+
+2. **Domain**
+   * Schema definition:
+     ```prisma
+     model Domain {
+       id          String    @id @default(uuid())
+       domain      String    @unique
+       isPrimary   Boolean   @default(false)
+       isVerified  Boolean   @default(false)
+       createdAt   DateTime  @default(now())
+       tenantId    String
+       tenant      Tenant    @relation(fields: [tenantId], references: [id])
+       
+       @@index([tenantId])
+     }
+     ```
+
+3. **Tenant Settings**
+   * Schema definition:
+     ```prisma
+     model TenantSettings {
+       id                      String    @id @default(uuid())
+       tenantId                String    @unique
+       tenant                  Tenant    @relation(fields: [tenantId], references: [id])
+       currency                String    @default("USD")
+       timezone                String    @default("UTC")
+       emailFromName           String?
+       emailFromAddress        String?
+       orderNumberPrefix       String?
+       invoiceNumberPrefix     String?
+       checkoutSettings        Json?     // Structured JSON for checkout config
+       inventorySettings       Json?     // Inventory management settings
+       shippingSettings        Json?     // Shipping configuration
+       taxSettings             Json?     // Tax calculation settings
+       paymentProviderSettings Json?     // Payment provider configuration
+       analyticsSettings       Json?     // Analytics integration settings
+       createdAt               DateTime  @default(now())
+       updatedAt               DateTime  @updatedAt
+     }
+     ```
+
+4. **Tenant Feature**
+   * Schema definition:
+     ```prisma
+     model TenantFeature {
+       id          String    @id @default(uuid())
+       tenantId    String
+       tenant      Tenant    @relation(fields: [tenantId], references: [id])
+       featureKey  String
+       isEnabled   Boolean   @default(true)
+       settings    Json?     // Feature-specific configuration
+       expiresAt   DateTime?
+       createdAt   DateTime  @default(now())
+       updatedAt   DateTime  @updatedAt
+       
+       @@unique([tenantId, featureKey])
+       @@index([tenantId])
+     }
+     ```
+
+## Tenant Lifecycle Management
+
+### Tenant Provisioning
+
+1. **Signup Flow**
+   * Capture business information
+   * Validate email and domain
+   * Create initial admin user
+   * Generate unique tenant identifier
+   * Associate with billing plan
+   * Example tenant creation service:
+     ```typescript
+     interface TenantCreationParams {
+       name: string;
+       adminEmail: string;
+       adminPassword: string;
+       plan: PlanType;
+       subdomain: string;
+       timezone?: string;
+       currency?: string;
+     }
+     
+     class TenantService {
+       constructor(
+         private readonly prisma: PrismaClient,
+         private readonly billingService: BillingService,
+         private readonly emailService: EmailService,
+       ) {}
+       
+       async createTenant(params: TenantCreationParams): Promise<Tenant> {
+         // Validate subdomain
+         const isSubdomainAvailable = await this.checkSubdomainAvailability(params.subdomain);
+         if (!isSubdomainAvailable) {
+           throw new BadRequestException('Subdomain is already taken');
+         }
+         
+         // Create tenant with transaction to ensure atomicity
+         return this.prisma.$transaction(async (tx) => {
+           // Create billing account
+           const billingAccount = await this.billingService.createCustomer({
+             email: params.adminEmail,
+             name: params.name,
+             plan: params.plan
+           });
+           
+           // Create tenant
+           const tenant = await tx.tenant.create({
+             data: {
+               name: params.name,
+               slug: params.subdomain,
+               plan: params.plan,
+               status: 'PROVISIONAL',
+               billingId: billingAccount.id,
+               domains: {
+                 create: {
+                   domain: `${params.subdomain}.${process.env.BASE_DOMAIN}`,
+                   isPrimary: true,
+                   isVerified: true,
+                 }
+               },
+               settings: {
+                 create: {
+                   timezone: params.timezone || 'UTC',
+                   currency: params.currency || 'USD',
+                 }
+               }
+             },
+           });
+           
+           // Create admin user
+           const adminUser = await tx.user.create({
+             data: {
+               email: params.adminEmail,
+               password: await this.hashPassword(params.adminPassword),
+               role: 'TENANT_ADMIN',
+               tenantId: tenant.id,
+               status: 'ACTIVE',
+             }
+           });
+           
+           // Initialize default data
+           await this.initializeDefaultData(tx, tenant.id);
+           
+           // Send welcome email
+           await this.emailService.sendWelcomeEmail({
+             to: params.adminEmail,
+             tenantName: params.name,
+             loginUrl: `https://${params.subdomain}.${process.env.BASE_DOMAIN}/admin`
+           });
+           
+           return tenant;
+         });
+       }
+       
+       private async initializeDefaultData(tx: Prisma.TransactionClient, tenantId: string): Promise<void> {
+         // Create default categories
+         await tx.category.createMany({
+           data: defaultCategories.map(category => ({
+             ...category,
+             tenantId,
+           })),
+         });
+         
+         // Create default tax rates
+         await tx.taxRate.createMany({
+           data: defaultTaxRates.map(taxRate => ({
+             ...taxRate,
+             tenantId,
+           })),
+         });
+         
+         // More default data initialization as needed
+       }
+     }
+     ```
+
+2. **Domain Configuration**
+   * Support custom domains
+   * Implement domain verification
+   * Configure SSL certificates
+   * Update DNS settings
+   * Example domain verification flow:
+     ```typescript
+     class DomainService {
+       async addCustomDomain(tenantId: string, domain: string): Promise<Domain> {
+         // Check if domain already exists
+         const existing = await this.prisma.domain.findUnique({
+           where: { domain },
+         });
+         
+         if (existing) {
+           throw new BadRequestException('Domain is already in use');
+         }
+         
+         // Create domain record
+         const domainRecord = await this.prisma.domain.create({
+           data: {
+             domain,
+             tenantId,
+             isVerified: false,
+             isPrimary: false,
+           },
+         });
+         
+         // Generate verification token
+         const verificationToken = this.generateVerificationToken();
+         await this.cacheService.set(
+           `domain-verification:${domain}`,
+           verificationToken,
+           60 * 60 * 24 // 24 hours
+         );
+         
+         // Return verification instructions
+         return {
+           ...domainRecord,
+           verificationDetails: {
+             type: 'TXT',
+             name: `_verification.${domain}`,
+             value: verificationToken,
+           }
+         };
+       }
+       
+       async verifyDomain(tenantId: string, domain: string): Promise<Domain> {
+         // Get domain record
+         const domainRecord = await this.prisma.domain.findFirst({
+           where: {
+             domain,
+             tenantId,
+           },
+         });
+         
+         if (!domainRecord) {
+           throw new NotFoundException('Domain not found');
+         }
+         
+         // Get verification token
+         const expectedToken = await this.cacheService.get(`domain-verification:${domain}`);
+         
+         if (!expectedToken) {
+           throw new BadRequestException('Verification token expired');
+         }
+         
+         // Check DNS records
+         try {
+           const txtRecords = await dns.promises.resolveTxt(`_verification.${domain}`);
+           const hasMatch = txtRecords.some(records => 
+             records.some(record => record === expectedToken)
+           );
+           
+           if (!hasMatch) {
+             throw new BadRequestException('TXT record not found or does not match');
+           }
+           
+           // Update domain as verified
+           const verifiedDomain = await this.prisma.domain.update({
+             where: { id: domainRecord.id },
+             data: { isVerified: true }
+           });
+           
+           // Request SSL certificate
+           await this.certificateService.provisionCertificate(domain);
+           
+           return verifiedDomain;
+         } catch (error) {
+           if (error instanceof BadRequestException) {
+             throw error;
+           }
+           throw new InternalServerErrorException('Failed to verify domain');
+         }
+       }
+     }
+     ```
+
+### Tenant Configuration
+
+1. **Initial Setup**
+   * Implement guided onboarding flow
+   * Configure branding (logo, colors)
+   * Set up payment methods
+   * Configure shipping and tax rules
+   * Example branding configuration:
+     ```typescript
+     class TenantConfigService {
+       async updateBranding(
+         tenantId: string, 
+         branding: {
+           logoFile?: Express.Multer.File,
+           primaryColor?: string,
+           secondaryColor?: string,
+           favicon?: Express.Multer.File,
+         }
+       ): Promise<Tenant> {
+         // Upload logo if provided
+         let logoUrl = undefined;
+         if (branding.logoFile) {
+           logoUrl = await this.storageService.uploadTenantLogo(
+             tenantId, 
+             branding.logoFile
+           );
+         }
+         
+         // Validate colors
+         if (branding.primaryColor && !this.isValidHexColor(branding.primaryColor)) {
+           throw new BadRequestException('Invalid primary color format');
+         }
+         
+         if (branding.secondaryColor && !this.isValidHexColor(branding.secondaryColor)) {
+           throw new BadRequestException('Invalid secondary color format');
+         }
+         
+         // Update tenant
+         const updatedTenant = await this.prisma.tenant.update({
+           where: { id: tenantId },
+           data: {
+             ...(logoUrl && { logoUrl }),
+             ...(branding.primaryColor && { primaryColor: branding.primaryColor }),
+             ...(branding.secondaryColor && { secondaryColor: branding.secondaryColor }),
+           },
+         });
+         
+         // Upload favicon if provided
+         if (branding.favicon) {
+           await this.storageService.uploadTenantFavicon(tenantId, branding.favicon);
+         }
+         
+         // Bust cache for tenant assets
+         await this.cachingService.invalidateTenantAssets(tenantId);
+         
+         return updatedTenant;
+       }
+     }
+     ```
+
+2. **Feature Configuration**
+   * Enable/disable features based on plan
+   * Provide feature-specific settings
+   * Support time-limited feature trials
+   * Example feature management:
+     ```typescript
+     class FeatureService {
+       async getEnabledFeatures(tenantId: string): Promise<Feature[]> {
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+           include: { features: true },
+         });
+         
+         if (!tenant) {
+           throw new NotFoundException('Tenant not found');
+         }
+         
+         // Get plan-based features
+         const planFeatures = this.getPlanFeatures(tenant.plan);
+         
+         // Get tenant-specific features (overrides and additions)
+         const tenantFeatures = tenant.features
+           .filter(feature => !feature.expiresAt || feature.expiresAt > new Date())
+           .reduce((acc, feature) => {
+             acc[feature.featureKey] = {
+               isEnabled: feature.isEnabled,
+               settings: feature.settings,
+             };
+             return acc;
+           }, {});
+         
+         // Merge plan and tenant features, with tenant overriding plan
+         return Object.entries({
+           ...planFeatures,
+           ...tenantFeatures,
+         })
+           .filter(([_, feature]) => feature.isEnabled)
+           .map(([key, feature]) => ({
+             key,
+             settings: feature.settings,
+           }));
+       }
+       
+       async enableFeature(
+         tenantId: string, 
+         featureKey: string, 
+         settings?: any, 
+         expiresAt?: Date
+       ): Promise<TenantFeature> {
+         return this.prisma.tenantFeature.upsert({
+           where: {
+             tenantId_featureKey: {
+               tenantId,
+               featureKey,
+             },
+           },
+           update: {
+             isEnabled: true,
+             ...(settings && { settings }),
+             ...(expiresAt && { expiresAt }),
+           },
+           create: {
+             tenantId,
+             featureKey,
+             isEnabled: true,
+             ...(settings && { settings }),
+             ...(expiresAt && { expiresAt }),
+           },
+         });
+       }
+     }
+     ```
+
+3. **Theme Customization**
+   * Provide theming options (colors, typography)
+   * Support custom CSS
+   * Template selection
+   * Example theme generation:
+     ```typescript
+     class ThemeService {
+       generateThemeCSS(tenant: Tenant): string {
+         const primaryColor = tenant.primaryColor || '#3B82F6';
+         const secondaryColor = tenant.secondaryColor || '#10B981';
+         
+         return `
+           :root {
+             --color-primary: ${primaryColor};
+             --color-primary-light: ${this.lightenColor(primaryColor, 0.8)};
+             --color-primary-dark: ${this.darkenColor(primaryColor, 0.2)};
+             
+             --color-secondary: ${secondaryColor};
+             --color-secondary-light: ${this.lightenColor(secondaryColor, 0.8)};
+             --color-secondary-dark: ${this.darkenColor(secondaryColor, 0.2)};
+             
+             /* Additional theme variables */
+             --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+             --border-radius: 4px;
+           }
+           
+           /* Additional tenant-specific CSS here */
+         `;
+       }
+       
+       async getTenantCSS(tenantId: string): Promise<string> {
+         // Get tenant
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+         
+         if (!tenant) {
+           throw new NotFoundException('Tenant not found');
+         }
+         
+         // Generate base theme CSS
+         const themeCSS = this.generateThemeCSS(tenant);
+         
+         // Get tenant custom CSS if exists
+         const customCSS = await this.prisma.tenantSettings.findUnique({
+           where: { tenantId },
+           select: { customCSS: true },
+         });
+         
+         // Combine base theme and custom CSS
+         return `
+           ${themeCSS}
+           
+           ${customCSS?.customCSS || ''}
+         `;
+       }
+     }
+     ```
+
+### Tenant State Management
+
+1. **Status Transitions**
+   * Implement tenant status workflow:
+     * PROVISIONAL → ACTIVE → SUSPENDED → TERMINATED
+   * Handle status-specific restrictions
+   * Automate status changes based on billing
+   * Example status transition:
+     ```typescript
+     class TenantStateService {
+       async suspendTenant(tenantId: string, reason: string): Promise<Tenant> {
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+         
+         if (!tenant) {
+           throw new NotFoundException('Tenant not found');
+         }
+         
+         // Check current status
+         if (tenant.status === 'TERMINATED') {
+           throw new BadRequestException('Cannot suspend terminated tenant');
+         }
+         
+         // Perform suspend actions
+         await this.prisma.$transaction(async (tx) => {
+           // Update tenant status
+           await tx.tenant.update({
+             where: { id: tenantId },
+             data: { status: 'SUSPENDED' },
+           });
+           
+           // Log status change
+           await tx.tenantAuditLog.create({
+             data: {
+               tenantId,
+               action: 'STATUS_CHANGE',
+               value: 'SUSPENDED',
+               reason,
+               performedBy: 'SYSTEM',
+             },
+           });
+           
+           // Disable active sessions
+           await tx.session.updateMany({
+             where: { 
+               user: { tenantId },
+               expiresAt: { gt: new Date() },
+             },
+             data: { expiresAt: new Date() },
+           });
+         });
+         
+         // Notify tenant admins
+         const admins = await this.prisma.user.findMany({
+           where: {
+             tenantId,
+             role: 'TENANT_ADMIN',
+           },
+         });
+         
+         for (const admin of admins) {
+           await this.emailService.sendTenantSuspendedEmail({
+             to: admin.email,
+             tenantName: tenant.name,
+             reason,
+           });
+         }
+         
+         return this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+       }
+       
+       async activateTenant(tenantId: string): Promise<Tenant> {
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+         
+         if (!tenant) {
+           throw new NotFoundException('Tenant not found');
+         }
+         
+         // Check current status
+         if (tenant.status === 'TERMINATED') {
+           throw new BadRequestException('Cannot activate terminated tenant');
+         }
+         
+         // Perform activation
+         await this.prisma.$transaction(async (tx) => {
+           // Update tenant status
+           await tx.tenant.update({
+             where: { id: tenantId },
+             data: { status: 'ACTIVE' },
+           });
+           
+           // Log status change
+           await tx.tenantAuditLog.create({
+             data: {
+               tenantId,
+               action: 'STATUS_CHANGE',
+               value: 'ACTIVE',
+               reason: 'Tenant activated',
+               performedBy: 'SYSTEM',
+             },
+           });
+         });
+         
+         // Notify tenant admins
+         const admins = await this.prisma.user.findMany({
+           where: {
+             tenantId,
+             role: 'TENANT_ADMIN',
+           },
+         });
+         
+         for (const admin of admins) {
+           await this.emailService.sendTenantActivatedEmail({
+             to: admin.email,
+             tenantName: tenant.name,
+           });
+         }
+         
+         return this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+       }
+     }
+     ```
+
+2. **Tenant Termination**
+   * Implement data export
+   * Schedule data deletion
+   * Handle billing cancellation
+   * Example termination flow:
+     ```typescript
+     class TenantTerminationService {
+       async scheduleTenantTermination(
+         tenantId: string, 
+         options: {
+           effectiveDate: Date,
+           reason: string,
+           shouldExportData: boolean,
+         }
+       ): Promise<void> {
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+         
+         if (!tenant) {
+           throw new NotFoundException('Tenant not found');
+         }
+         
+         // Immediately suspend tenant
+         await this.tenantStateService.suspendTenant(tenantId, 'Pending termination');
+         
+         // Schedule termination
+         await this.prisma.tenantTermination.create({
+           data: {
+             tenantId,
+             scheduledDate: options.effectiveDate,
+             reason: options.reason,
+             status: 'SCHEDULED',
+             shouldExportData: options.shouldExportData,
+           },
+         });
+         
+         // Update tenant
+         await this.prisma.tenant.update({
+           where: { id: tenantId },
+           data: { expiresAt: options.effectiveDate },
+         });
+         
+         // Cancel billing subscription
+         await this.billingService.cancelSubscription(tenant.billingId);
+         
+         // Notify tenant admins
+         const admins = await this.prisma.user.findMany({
+           where: {
+             tenantId,
+             role: 'TENANT_ADMIN',
+           },
+         });
+         
+         for (const admin of admins) {
+           await this.emailService.sendTenantTerminationEmail({
+             to: admin.email,
+             tenantName: tenant.name,
+             terminationDate: options.effectiveDate,
+             reason: options.reason,
+           });
+         }
+         
+         // Schedule data export if requested
+         if (options.shouldExportData) {
+           await this.jobQueue.add('exportTenantData', {
+             tenantId,
+             reason: 'TERMINATION',
+           });
+         }
+       }
+       
+       async executeTenantTermination(tenantId: string): Promise<void> {
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+           include: { domains: true },
+         });
+         
+         if (!tenant) {
+           throw new NotFoundException('Tenant not found');
+         }
+         
+         // Update tenant status
+         await this.prisma.tenant.update({
+           where: { id: tenantId },
+           data: { status: 'TERMINATED' },
+         });
+         
+         // Update termination record
+         await this.prisma.tenantTermination.update({
+           where: { tenantId },
+           data: { status: 'COMPLETED', completedAt: new Date() },
+         });
+         
+         // Schedule data deletion (GDPR compliance)
+         await this.jobQueue.add(
+           'deleteTenantData',
+           { tenantId },
+           { delay: 30 * 24 * 60 * 60 * 1000 } // 30 days
+         );
+         
+         // Release custom domains
+         for (const domain of tenant.domains) {
+           if (!domain.domain.endsWith(process.env.BASE_DOMAIN)) {
+             // Release domain in certificate manager
+             await this.certificateService.revokeCertificate(domain.domain);
+           }
+         }
+         
+         // Log final termination
+         await this.logger.info('Tenant terminated', {
+           tenantId,
+           name: tenant.name,
+         });
+       }
+     }
+     ```
+
+3. **Billing Integration**
+   * Link tenant status to billing status
+   * Handle plan upgrades/downgrades
+   * Process failed payments
+   * Example billing sync:
+     ```typescript
+     @Injectable()
+     export class BillingWebhookService {
+       constructor(
+         private readonly prisma: PrismaClient,
+         private readonly tenantStateService: TenantStateService,
+       ) {}
+       
+       async handleSubscriptionUpdated(event: BillingEvent): Promise<void> {
+         const { customer, subscription } = event.data.object;
+         
+         // Find tenant by billing ID
+         const tenant = await this.prisma.tenant.findFirst({
+           where: { billingId: customer },
+         });
+         
+         if (!tenant) {
+           this.logger.warn('Received billing event for unknown tenant', { customer });
+           return;
+         }
+         
+         // Handle subscription status
+         switch (subscription.status) {
+           case 'active':
+             if (tenant.status === 'SUSPENDED') {
+               await this.tenantStateService.activateTenant(tenant.id);
+             }
+             break;
+             
+           case 'past_due':
+             // Send warning but don't suspend yet
+             await this.emailService.sendPaymentPastDueEmail({
+               tenantId: tenant.id,
+             });
+             break;
+             
+           case 'unpaid':
+             // Suspend tenant after grace period
+             await this.tenantStateService.suspendTenant(
+               tenant.id, 
+               'Unpaid subscription'
+             );
+             break;
+             
+           case 'canceled':
+             // Schedule termination
+             const terminationDate = new Date();
+             terminationDate.setDate(terminationDate.getDate() + 30); // 30 days grace
+             
+             await this.tenantTerminationService.scheduleTenantTermination(
+               tenant.id,
+               {
+                 effectiveDate: terminationDate,
+                 reason: 'Subscription canceled',
+                 shouldExportData: true,
+               }
+             );
+             break;
+         }
+         
+         // Update tenant plan if changed
+         if (subscription.plan && subscription.plan.id) {
+           const newPlan = this.mapBillingPlanToTenantPlan(subscription.plan.id);
+           
+           if (newPlan && tenant.plan !== newPlan) {
+             await this.prisma.tenant.update({
+               where: { id: tenant.id },
+               data: { plan: newPlan },
+             });
+             
+             // Handle plan change side effects
+             await this.handlePlanChange(tenant.id, tenant.plan, newPlan);
+           }
+         }
+       }
+       
+       private async handlePlanChange(
+         tenantId: string, 
+         oldPlan: PlanType, 
+         newPlan: PlanType
+       ): Promise<void> {
+         // Determine if upgrade or downgrade
+         const isUpgrade = this.isPlanUpgrade(oldPlan, newPlan);
+         
+         if (isUpgrade) {
+           // Enable features for new plan
+           const newFeatures = this.getAdditionalPlanFeatures(oldPlan, newPlan);
+           
+           for (const feature of newFeatures) {
+             await this.prisma.tenantFeature.upsert({
+               where: { 
+                 tenantId_featureKey: {
+                   tenantId,
+                   featureKey: feature.key,
+                 },
+               },
+               update: { 
+                 isEnabled: true,
+                 settings: feature.defaultSettings,
+                 expiresAt: null,
+               },
+               create: {
+                 tenantId,
+                 featureKey: feature.key,
+                 isEnabled: true,
+                 settings: feature.defaultSettings,
+               },
+             });
+           }
+         } else {
+           // Handle downgrade - disable features not in new plan
+           const removedFeatures = this.getRemovedPlanFeatures(oldPlan, newPlan);
+           
+           for (const feature of removedFeatures) {
+             await this.prisma.tenantFeature.update({
+               where: { 
+                 tenantId_featureKey: {
+                   tenantId,
+                   featureKey: feature.key,
+                 },
+               },
+               data: { isEnabled: false },
+             });
+           }
+         }
+         
+         // Send notification
+         await this.emailService.sendPlanChangeEmail({
+           tenantId,
+           oldPlan,
+           newPlan,
+           isUpgrade,
+         });
+       }
+     }
+     ```
+
+## Multi-Tenant Request Handling
+
+### Tenant Resolution
+
+1. **Domain-Based Resolution**
+   * Extract tenant from hostname
+   * Support custom domains
+   * Fallback to subdomain
+   * Example tenant middleware:
+     ```typescript
+     @Injectable()
+     export class TenantMiddleware implements NestMiddleware {
+       constructor(
+         private readonly tenantService: TenantService,
+         private readonly tenantContextService: TenantContextService,
+       ) {}
+       
+       async use(req: Request, res: Response, next: NextFunction) {
+         // For API requests, check header first
+         const tenantIdHeader = req.headers['x-tenant-id'];
+         if (tenantIdHeader) {
+           const tenant = await this.tenantService.findById(tenantIdHeader as string);
+           if (tenant) {
+             this.tenantContextService.setCurrentTenant(tenant);
+             return next();
+           }
+         }
+         
+         // Extract hostname
+         const hostname = req.hostname;
+         
+         // Skip tenant resolution for platform domains
+         if (this.isPlatformDomain(hostname)) {
+           return next();
+         }
+         
+         try {
+           // Resolve tenant from hostname
+           const tenant = await this.tenantService.findByDomain(hostname);
+           
+           if (!tenant) {
+             return res.status(404).json({
+               statusCode: 404,
+               message: 'Tenant not found',
+             });
+           }
+           
+           // Check tenant status
+           if (tenant.status !== 'ACTIVE') {
+             switch (tenant.status) {
+               case 'SUSPENDED':
+                 return res.status(403).json({
+                   statusCode: 403,
+                   message: 'This store is currently suspended',
+                 });
+               case 'TERMINATED':
+                 return res.status(410).json({
+                   statusCode: 410,
+                   message: 'This store is no longer available',
+                 });
+               default:
+                 return res.status(503).json({
+                   statusCode: 503,
+                   message: 'This store is not available at this time',
+                 });
+             }
+           }
+           
+           // Set tenant in context
+           this.tenantContextService.setCurrentTenant(tenant);
+           next();
+         } catch (error) {
+           next(error);
+         }
+       }
+       
+       private isPlatformDomain(hostname: string): boolean {
+         const platformDomains = [
+           process.env.ADMIN_DOMAIN,
+           process.env.API_DOMAIN,
+         ];
+         
+         return platformDomains.some(domain => 
+           hostname === domain || hostname.endsWith(`.${domain}`)
+         );
+       }
+     }
+     ```
+
+2. **Tenant Context Management**
+   * Store current tenant in request scope
+   * Provide helpers to access tenant info
+   * Validate tenant access in guards
+   * Example context service:
+     ```typescript
+     @Injectable({ scope: Scope.REQUEST })
+     export class TenantContextService {
+       private currentTenant: Tenant | null = null;
+       
+       setCurrentTenant(tenant: Tenant): void {
+         this.currentTenant = tenant;
+       }
+       
+       getCurrentTenant(): Tenant | null {
+         return this.currentTenant;
+       }
+       
+       getCurrentTenantId(): string | null {
+         return this.currentTenant?.id || null;
+       }
+       
+       ensureTenant(): Tenant {
+         if (!this.currentTenant) {
+           throw new UnauthorizedException('No tenant context available');
+         }
+         return this.currentTenant;
+       }
+       
+       hasTenant(): boolean {
+         return !!this.currentTenant;
+       }
+     }
+     ```
+
+3. **Cross-Tenant Access**
+   * Implement platform admin role
+   * Provide explicit cross-tenant operations
+   * Log all cross-tenant access
+   * Example cross-tenant guard:
+     ```typescript
+     @Injectable()
+     export class CrossTenantGuard implements CanActivate {
+       constructor(
+         private readonly tenantContextService: TenantContextService,
+         private readonly auditService: AuditService,
+       ) {}
+       
+       async canActivate(context: ExecutionContext): Promise<boolean> {
+         const request = context.switchToHttp().getRequest();
+         const user = request.user;
+         
+         // Allow platform admins
+         if (user.role === 'PLATFORM_ADMIN') {
+           // Log cross-tenant access
+           if (request.params.tenantId) {
+             await this.auditService.logCrossTenantAccess({
+               userId: user.id,
+               targetTenantId: request.params.tenantId,
+               action: request.method,
+               path: request.path,
+             });
+           }
+           
+           return true;
+         }
+         
+         // For regular users, ensure tenant ID matches
+         const currentTenantId = this.tenantContextService.getCurrentTenantId();
+         const targetTenantId = request.params.tenantId;
+         
+         if (!currentTenantId || currentTenantId !== targetTenantId) {
+           throw new ForbiddenException('Cross-tenant access not allowed');
+         }
+         
+         return true;
+       }
+     }
+     ```
+
+By implementing these tenant management practices, we ensure proper tenant isolation, customization, and lifecycle management in our multi-tenant e-commerce platform.

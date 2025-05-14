@@ -1,0 +1,116 @@
+---
+description: Frontend development conventions and best practices
+globs: "frontend/**/*"
+alwaysApply: true
+---
+
+# Frontend Conventions
+
+## Tech Stack & Core Libraries
+
+* **Framework**: Next.js (v14+) with TypeScript
+  * Use App Router for new features
+  * Leverage Server Components where appropriate
+  * Use strict TypeScript (`"strict": true` in tsconfig.json)
+
+* **Styling**: Tailwind CSS
+  * Configure theme in `tailwind.config.js`
+  * Abstract repeated patterns with `@apply` in CSS modules
+  * Implement tenant-specific theming via CSS variables
+
+* **State Management**:
+  * Use React Query for server state
+  * Use React Context for global UI state
+  * Use local state for component-specific state
+
+* **Data Fetching**:
+  * Centralize API calls in service modules
+  * Use React Query for caching and synchronization
+  * Handle loading/error states consistently
+
+## Component Architecture
+
+1. **Component Organization**:
+   * Group components by domain (e.g., `product`, `checkout`)
+   * Create reusable components in `common/`
+   * Use index files to expose public components
+
+2. **Component Structure**:
+   * Props interface defined at the top
+   * Props destructuring with defaults
+   * Clear return statement with organized JSX
+
+3. **Naming Conventions**:
+   * PascalCase for component names
+   * Components end with `.tsx` extension
+   * Test files as `ComponentName.test.tsx`
+
+## Code Organization
+
+1. **Directory Structure**:
+   ```
+   src/
+   ├── components/      # UI components
+   ├── pages/           # Page components
+   ├── hooks/           # Custom hooks
+   ├── services/        # API services
+   ├── utils/           # Utility functions
+   ├── types/           # TypeScript types/interfaces
+   ├── context/         # React Context providers
+   └── styles/          # Global styles
+   ```
+
+2. **Code Splitting**:
+   * Use dynamic imports for large components
+   * Lazy load below-the-fold content
+   * Extract vendor code into separate chunks
+
+3. **Asset Management**:
+   * Store images in `public/` directory
+   * Use Next.js Image component for optimization
+   * SVGs as React components when possible
+
+## Performance Best Practices
+
+1. **Rendering Optimization**:
+   * Memoize expensive components with `React.memo`
+   * Use `useCallback` for functions passed to child components
+   * Use `useMemo` for expensive computations
+
+2. **Bundle Optimization**:
+   * Keep dependencies minimal and focused
+   * Use tree-shakable libraries
+   * Monitor bundle size with tools like `next-bundle-analyzer`
+
+3. **Loading Performance**:
+   * Implement code splitting at route level
+   * Optimize Core Web Vitals (LCP, FID, CLS)
+   * Use skeleton loaders for content
+
+## Testing Approach
+
+1. **Unit Testing**:
+   * Test components with React Testing Library
+   * Test hooks with `renderHook`
+   * Mock external dependencies
+
+2. **Integration Testing**:
+   * Test key user flows
+   * Use MSW for API mocking
+   * Verify component interactions
+
+3. **E2E Testing**:
+   * Use Cypress for critical user journeys
+   * Test on multiple viewports
+   * Include accessibility checks
+
+## Accessibility Standards
+
+* Follow WCAG 2.1 AA standards
+* Use semantic HTML elements
+* Ensure keyboard navigation works
+* Maintain proper focus management
+* Test with screen readers
+* Verify sufficient color contrast
+
+By following these conventions, we ensure a consistent, maintainable, and high-performance frontend codebase.

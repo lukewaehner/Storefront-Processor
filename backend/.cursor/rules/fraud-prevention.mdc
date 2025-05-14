@@ -1,0 +1,153 @@
+---
+description: Fraud prevention and protection strategies
+globs: "backend/**/*"
+alwaysApply: false
+---
+
+# Fraud Prevention & Protection
+
+This document outlines strategies and implementations for preventing fraud and protecting both merchants and customers on the e-commerce platform.
+
+## Risk Scoring System
+
+### Order Risk Assessment
+
+1. **Risk Factors**
+   * Mismatch between billing and shipping addresses
+   * High-value orders from new customers
+   * Multiple failed payment attempts
+   * Orders from high-risk countries or regions
+   * Unusual shopping patterns or ordering times
+   * Multiple orders with different payment methods
+   * Shipping to freight forwarders or P.O. boxes
+
+2. **Scoring Methodology**
+   * Calculate cumulative risk score based on weighted factors
+   * Set thresholds for automated actions:
+     * 0-30: Accept automatically
+     * 31-70: Flag for review
+     * 71-100: Reject automatically
+   * Adjust weights based on historical fraud patterns
+
+3. **Implementation**
+   * Create `RiskScoringService` that evaluates orders
+   * Integrate at checkout completion
+   * Store risk scores with orders for auditing
+   * Update model regularly based on outcomes
+
+## Account Security Measures
+
+1. **Registration Protection**
+   * Implement email verification requirement
+   * Add CAPTCHA for registration and login
+   * Detect disposable email domains
+   * Validate phone numbers where collected
+   * Check for repeated registration attempts
+
+2. **Login Security**
+   * Rate limit login attempts (5 attempts per 15 minutes)
+   * Implement progressive delays between failed attempts
+   * Send login notifications for suspicious activity
+   * Offer 2FA for admin and merchant accounts
+   * Track login locations and alert on unusual patterns
+
+3. **Session Management**
+   * Generate secure session identifiers
+   * Expire sessions after appropriate inactivity
+   * Implement device fingerprinting
+   * Allow users to view and terminate active sessions
+   * Revoke all sessions on password change
+
+## Payment Verification
+
+1. **Card Verification**
+   * Enforce Address Verification Service (AVS) checks
+   * Require CVV/CVC for all transactions
+   * Implement 3D Secure for high-risk transactions
+   * Store card fingerprints to detect repeated usage
+   * Flag transactions with mismatching cardholder names
+
+2. **Payment Method Policies**
+   * Restrict high-risk payment methods for new customers
+   * Require identity verification for high-value purchases
+   * Implement velocity checks for multiple purchases
+   * Monitor for card testing patterns
+   * Implement pending period for non-card payments
+
+3. **Chargeback Prevention**
+   * Clearly communicate shipping timelines
+   * Require signature for high-value deliveries
+   * Maintain detailed transaction logs
+   * Implement friendly fraud detection
+   * Automate evidence collection for dispute resolution
+
+## Advanced Protection Systems
+
+1. **Machine Learning Detection**
+   * Train models on historical fraud patterns
+   * Implement real-time scoring of transactions
+   * Use anomaly detection for unusual behavior
+   * Continuously improve models with feedback loop
+   * Set confidence thresholds for intervention
+
+2. **Network Analysis**
+   * Track connections between accounts, addresses, and payment methods
+   * Identify fraud rings through graph analysis
+   * Flag accounts connected to known fraudulent users
+   * Monitor IP address patterns and proxy usage
+   * Detect multiple accounts from same device
+
+3. **Bot Protection**
+   * Implement device fingerprinting
+   * Add rate limiting on all sensitive endpoints
+   * Monitor for automated browsing patterns
+   * Protect inventory from hoarding bots
+   * Defend against credential stuffing attacks
+
+## Merchant Protection
+
+1. **Order Screening Workflow**
+   * Create admin interface for order review
+   * Display risk factors and scores
+   * Provide one-click approve/reject actions
+   * Allow custom rules per merchant
+   * Generate daily review queues
+
+2. **Notification System**
+   * Alert merchants to high-risk orders
+   * Send suspicious activity reports
+   * Provide fraud trend analysis
+   * Notify about chargeback risks
+   * Alert on account compromise attempts
+
+3. **Merchant Education**
+   * Provide fraud prevention best practices
+   * Offer training materials on risk factors
+   * Share industry patterns and trends
+   * Document evidence collection procedures
+   * Create chargeback defense guidelines
+
+## Implementation Components
+
+1. **Core Services**
+   * `FraudDetectionService`: Coordinates fraud checks
+   * `RiskScoringService`: Calculates risk scores
+   * `RuleEngineService`: Manages and evaluates fraud rules
+   * `VerificationService`: Handles identity verification
+   * `AlertService`: Manages notifications for suspicious activity
+
+2. **Database Entities**
+   * `RiskScore`: Stores risk assessment results
+   * `FraudRule`: Configurable rules for detection
+   * `SuspiciousActivity`: Logs potentially fraudulent actions
+   * `IdentityVerification`: Tracks verification requests/results
+   * `BlockedAddress`: Maintains list of blocked addresses/regions
+
+3. **Integration Points**
+   * Pre-checkout validation hook
+   * Post-order submission analysis
+   * Registration/login security middleware
+   * Payment provider advanced fraud tools
+   * Admin review dashboard
+
+By implementing these fraud prevention mechanisms, we protect both merchants and customers while minimizing friction for legitimate transactions.

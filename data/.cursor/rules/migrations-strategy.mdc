@@ -1,0 +1,303 @@
+---
+description: Data migration and tenant onboarding strategy
+globs: "data/**/*"
+alwaysApply: false
+---
+
+# Data Migration Strategy
+
+This document outlines the approach for managing database migrations, schema evolution, and tenant data import in our multi-tenant e-commerce platform.
+
+## Database Migration Framework
+
+### Schema Migrations
+
+1. **Migration Technology**
+   * Primary: Prisma Migrate for schema changes
+   * Alternative: TypeORM migrations for complex scenarios
+   * Support for both declarative and programmatic changes
+   * Version control for all migrations
+
+2. **Migration Process**
+   * Development workflow:
+     * Update schema definition
+     * Generate migration (`prisma migrate dev`)
+     * Review migration SQL
+     * Test with development data
+     * Commit schema and migration files
+   * Production workflow:
+     * Run migrations during deployment
+     * Apply in transaction when possible
+     * Validate before and after migration
+     * Maintain rollback capability
+
+3. **Migration Safety**
+   * Prefer additive, non-breaking changes
+   * Implement schema changes in multiple steps:
+     * Add new structure
+     * Migrate data (if needed)
+     * Update application code
+     * Remove old structure (future migration)
+   * Handle failure scenarios gracefully
+
+### Data Migrations
+
+1. **Implementation Approaches**
+   * Use Prisma's `beforeMigrate`/`afterMigrate` hooks for simple transformations
+   * Create dedicated migration scripts for complex transformations
+   * Implement batch processing for large data volumes
+   * Support resumable migrations
+
+2. **Transformation Utilities**
+   * Create reusable data transformation classes
+   * Implement validation pre/post migration
+   * Add data migration logging and progress tracking
+   * Support for dry-run mode
+
+3. **Example Implementation**
+   ```typescript
+   // Example data migration script
+   export async function migrateProductCategories(prisma: PrismaClient) {
+     // Get migration batch size from config
+     const batchSize = config.migrations.batchSize || 100;
+     
+     // Get total count for progress tracking
+     const totalProducts = await prisma.product.count();
+     let processed = 0;
+     
+     // Process in batches
+     while (processed < totalProducts) {
+       const products = await prisma.product.findMany({
+         skip: processed,
+         take: batchSize,
+         where: {
+           // Select only products that need migration
+           oldCategoryId: { not: null },
+           newCategoryId: null,
+         },
+       });
+       
+       // Stop if no more records to process
+       if (products.length === 0) break;
+       
+       // Process batch
+       await Promise.all(products.map(async (product) => {
+         // Map old category to new category
+         const newCategoryId = categoryMap[product.oldCategoryId];
+         
+         // Update product with new category
+         await prisma.product.update({
+           where: { id: product.id },
+           data: { newCategoryId },
+         });
+       }));
+       
+       processed += products.length;
+       logger.info(`Migrated ${processed}/${totalProducts} products`);
+     }
+   }
+   ```
+
+## Tenant Data Import
+
+### Import Framework
+
+1. **Import Architecture**
+   * Create extensible import pipeline
+   * Support multiple data formats (CSV, JSON, XML)
+   * Implement validation and transformation steps
+   * Store import history and results
+
+2. **Processing Pipeline**
+   * **Extraction**: Parse input file or API data
+   * **Validation**: Verify data structure and content
+   * **Transformation**: Map to internal data model
+   * **Enrichment**: Add missing values, defaults
+   * **Loading**: Insert into database
+   * **Verification**: Validate successful import
+
+3. **Implementation Example**
+   ```typescript
+   // Example import pipeline
+   class ImportPipeline<T> {
+     constructor(
+       private readonly extractors: Record<string, DataExtractor>,
+       private readonly validator: DataValidator,
+       private readonly transformer: DataTransformer,
+       private readonly loader: DataLoader<T>,
+       private readonly verifier: ImportVerifier<T>
+     ) {}
+     
+     async process(source: ImportSource): Promise<ImportResult> {
+       // Extract data from source
+       const rawData = await this.extractors[source.type].extract(source);
+       
+       // Validate structure
+       const validationResult = this.validator.validate(rawData);
+       if (!validationResult.isValid) {
+         return { success: false, errors: validationResult.errors };
+       }
+       
+       // Transform to internal model
+       const transformedData = this.transformer.transform(rawData);
+       
+       // Load into database
+       const loadResult = await this.loader.load(transformedData);
+       
+       // Verify import
+       const verificationResult = await this.verifier.verify(loadResult);
+       
+       return {
+         success: verificationResult.success,
+         processed: loadResult.processed,
+         errors: verificationResult.errors,
+         warnings: verificationResult.warnings,
+       };
+     }
+   }
+   ```
+
+### Product Catalog Import
+
+1. **Data Mapping**
+   * Map external product schema to internal model
+   * Handle variant/option structures
+   * Process images and assets
+   * Convert prices and units
+   * Map to platform categories
+
+2. **Validation Rules**
+   * Required fields: name, price, SKU
+   * Format validation for identifiers
+   * Price and inventory constraints
+   * Image format and size limits
+   * Custom rules per tenant
+
+3. **Deduplication Strategy**
+   * Use SKU or external ID as primary key
+   * Implement update vs. insert logic
+   * Handle variant merging
+   * Flag potential duplicates
+
+### Customer Data Import
+
+1. **Data Protection**
+   * Enforce PII handling requirements
+   * Encrypt sensitive fields during import
+   * Validate consent for data usage
+   * Log all customer data imports
+
+2. **Data Normalization**
+   * Standardize name formats
+   * Normalize and validate addresses
+   * Format phone numbers
+   * Deduplicate customer records
+   * Merge purchase history
+
+3. **Account Creation**
+   * Generate secure temporary passwords
+   * Create welcome email workflow
+   * Handle existing email conflicts
+   * Map customer groups and segments
+
+### Order History Import
+
+1. **Order Processing**
+   * Recreate order history in platform
+   * Link to imported customers and products
+   * Preserve original order dates and IDs
+   * Mark as "imported" for reporting
+
+2. **Financial Reconciliation**
+   * Import payment records
+   * Mark payments as "external/reconciled"
+   * Handle refunds and partial payments
+   * Maintain financial integrity
+
+3. **Fulfillment Status**
+   * Import shipping and delivery information
+   * Recreate fulfillment timeline
+   * Link to tracking numbers
+   * Maintain order status history
+
+## Tenant Onboarding
+
+### Base Data Initialization
+
+1. **Default Setup**
+   * Create standard category structure
+   * Generate default configuration
+   * Set up payment and shipping methods
+   * Create initial admin user
+   * Add starter page templates
+
+2. **Sample Data (Optional)**
+   * Provide demo products
+   * Generate example content
+   * Create test customers
+   * Add sample orders
+   * Set up showcase features
+
+3. **Implementation**
+   ```typescript
+   // Example tenant initialization
+   async function initializeTenant(tenant: Tenant): Promise<void> {
+     // Get prisma client
+     const prisma = new PrismaClient();
+     
+     // Create base settings
+     await prisma.tenantSettings.create({
+       data: {
+         tenantId: tenant.id,
+         ...defaultSettings,
+       },
+     });
+     
+     // Create default categories
+     await Promise.all(defaultCategories.map(category => 
+       prisma.category.create({
+         data: {
+           ...category,
+           tenantId: tenant.id,
+         },
+       })
+     ));
+     
+     // Create admin user
+     await prisma.user.create({
+       data: {
+         email: tenant.adminEmail,
+         role: 'TENANT_ADMIN',
+         tenantId: tenant.id,
+         invitationSent: true,
+       },
+     });
+     
+     // Add sample data if requested
+     if (tenant.includeSampleData) {
+       await importSampleData(tenant.id, prisma);
+     }
+   }
+   ```
+
+### Migration Verification
+
+1. **Data Quality Checks**
+   * Validate counts match source system
+   * Check for missing required fields
+   * Verify relationship integrity
+   * Run business rule validations
+
+2. **Reporting**
+   * Generate import summary report
+   * List validation errors and warnings
+   * Provide reconciliation data
+   * Track import performance metrics
+
+3. **Remediation Process**
+   * Identify and fix import issues
+   * Support selective re-import
+   * Provide data cleanup tools
+   * Document manual intervention steps
+
+By implementing these data migration and tenant onboarding strategies, we ensure smooth tenant transitions and reliable schema evolution for our platform.

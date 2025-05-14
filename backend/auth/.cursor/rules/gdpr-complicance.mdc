@@ -1,0 +1,197 @@
+---
+description: GDPR and privacy compliance requirements for user data
+globs: "backend/auth/**/*"
+alwaysApply: false
+---
+
+# GDPR & Privacy Compliance
+
+This document outlines the GDPR and privacy compliance requirements for handling user data within our e-commerce platform.
+
+## Data Protection Principles
+
+1. **Lawfulness, Fairness, and Transparency**
+   * Process data only with valid legal basis
+   * Clearly communicate processing activities to users
+   * Document all data processing operations
+   * Maintain transparency about data use
+
+2. **Purpose Limitation**
+   * Collect data only for specified, explicit purposes
+   * Do not process data in ways incompatible with original purpose
+   * Document purpose for each data category
+   * Implement technical controls to enforce limitations
+
+3. **Data Minimization**
+   * Collect only data necessary for the specified purpose
+   * Limit access to personal data to those who need it
+   * Design forms to collect only essential information
+   * Regularly review and remove unnecessary data fields
+
+4. **Accuracy**
+   * Implement validation for user-provided data
+   * Allow users to review and update their data
+   * Correct inaccurate data promptly
+   * Maintain data quality through regular audits
+
+5. **Storage Limitation**
+   * Define retention periods for each data category
+   * Automatically purge data after retention period
+   * Document justification for retention periods
+   * Separate operational data from archived data
+
+6. **Integrity and Confidentiality**
+   * Encrypt sensitive data at rest and in transit
+   * Implement strict access controls
+   * Log access to personal data
+   * Regular security testing and auditing
+
+## Data Subject Rights Implementation
+
+1. **Right to Access**
+   * Endpoint: `GET /users/me/data`
+   * Collect all personal data for the user
+   * Include data from all related entities
+   * Format in machine-readable and human-readable formats
+   * Verify identity before providing data
+
+2. **Right to Rectification**
+   * Allow users to update profile information
+   * Provide mechanism to request correction of inaccurate data
+   * Implement approval workflow for critical data changes
+   * Notify third parties of corrections when shared
+
+3. **Right to Erasure (Right to be Forgotten)**
+   * Endpoint: `DELETE /users/me`
+   * Implement full account deletion process
+   * Anonymize data that must be retained (e.g., order history for tax purposes)
+   * Cascade deletion to related entities
+   * Document what is deleted vs. anonymized
+
+4. **Right to Restrict Processing**
+   * Implement account deactivation option
+   * Allow granular consent withdrawal
+   * Mark data as "restricted" in the database
+   * Enforce restrictions in application logic
+
+5. **Right to Data Portability**
+   * Export data in structured, common format (JSON)
+   * Include all user-provided data
+   * Support direct transfer where technically feasible
+   * Include explanatory documentation with exports
+
+6. **Right to Object**
+   * Allow users to opt out of specific processing activities
+   * Implement preference center for marketing communications
+   * Document objection handling process
+   * Create audit trail for objections
+
+## Consent Management
+
+1. **Consent Collection**
+   * Obtain explicit, granular consent
+   * Separate consent for different purposes
+   * No pre-ticked boxes or implicit consent
+   * Document consent with timestamp and method
+
+2. **Consent Storage**
+   * Entity: `UserConsent`
+   * Store purpose, timestamp, method, and status
+   * Maintain consent history
+   * Make consent records immutable
+
+3. **Consent Withdrawal**
+   * Simple process to withdraw consent
+   * Immediate processing of withdrawal requests
+   * Update processing systems in real-time
+   * Notify processors of consent changes
+
+4. **Consent for Children**
+   * Implement age verification mechanisms
+   * Require parental consent for users under 16 (or applicable age)
+   * Verify parental consent with appropriate measures
+   * Use age-appropriate language in consent requests
+
+## Data Breach Response
+
+1. **Detection**
+   * Implement monitoring for unauthorized access
+   * Train staff to recognize data breaches
+   * Review logs and access patterns
+   * Create data breach identification criteria
+
+2. **Assessment**
+   * Evaluate breach scope and severity
+   * Identify affected data subjects and data types
+   * Assess risk to individuals' rights and freedoms
+   * Document assessment process and findings
+
+3. **Notification**
+   * Prepare to notify supervisory authority within 72 hours
+   * Create notification templates for authorities
+   * Develop communication plan for affected users
+   * Document notification decisions and timing
+
+4. **Remediation**
+   * Close security vulnerabilities
+   * Revoke compromised credentials
+   * Restore affected systems to secure state
+   * Implement additional controls to prevent recurrence
+
+## Privacy by Design Implementation
+
+1. **Technical Measures**
+   * Field-level encryption for sensitive PII
+   * Data anonymization for analytics
+   * Automatic data purging based on retention rules
+   * Audit logging for all personal data access
+
+2. **Organizational Measures**
+   * Conduct Data Protection Impact Assessments (DPIA)
+   * Maintain Records of Processing Activities (ROPA)
+   * Regular privacy training for team members
+   * Designate privacy responsible person(s)
+
+3. **Default Settings**
+   * Privacy-friendly defaults for user settings
+   * Minimize data collection in standard forms
+   * Time-limited data retention by default
+   * Minimize data sharing with third parties
+
+## Multi-Tenancy Considerations
+
+1. **Tenant Responsibilities**
+   * Clearly define processor vs. controller relationships
+   * Document responsibilities in Terms of Service
+   * Provide tools for tenants to comply with GDPR
+   * Support tenant-specific privacy policies
+
+2. **Regional Settings**
+   * Adapt data handling based on user location
+   * Implement geofencing for certain features
+   * Support different consent requirements by region
+   * Configure data storage locations for compliance
+
+3. **Data Processing Agreements**
+   * Establish DPAs with tenants when we act as processor
+   * Maintain DPAs with our subprocessors
+   * Regular review and updates to agreements
+   * Monitor compliance with agreement terms
+
+## Implementation Components
+
+1. **Core Services**
+   * `PrivacyService`: Central service for privacy operations
+   * `ConsentService`: Manages consent collection and status
+   * `DataExportService`: Handles data access requests
+   * `DataDeletionService`: Manages right to erasure
+   * `BreachNotificationService`: Coordinates breach response
+
+2. **Database Entities**
+   * `UserConsent`: Tracks consent records
+   * `DataRetentionPolicy`: Configures retention periods
+   * `DataAccessRequest`: Tracks access requests
+   * `DataDeletionRequest`: Manages deletion workflow
+   * `ProcessingActivity`: Documents processing purposes
+
+By implementing these GDPR and privacy compliance measures, we ensure our platform respects user privacy rights and meets regulatory requirements.

@@ -1,0 +1,224 @@
+---
+description: Multi-tenancy implementation in the data layer
+globs: "data/**/*"
+alwaysApply: true
+---
+
+# Multi-Tenancy Implementation
+
+This document outlines the implementation details for multi-tenancy in the data layer of our e-commerce platform, ensuring proper isolation and efficiency.
+
+## Multi-Tenancy Models
+
+### Row-Based Tenancy
+
+1. **Schema Design**
+   * Add `tenantId` foreign key to all tenant-scoped tables
+   * Create a shared database with tenant-specific rows
+   * Ensure all queries include tenant filtering
+   * Create composite indexes with `tenantId` first
+
+2. **Advantages**
+   * Efficient resource utilization
+   * Simpler backup and maintenance
+   * Easier cross-tenant operations when needed
+   * Simplified schema updates and migrations
+
+3. **Implementation**
+   * Create `Tenant` model for tenant metadata
+   * Add `tenantId` reference to all tenant-scoped models
+   * Create database constraints for referential integrity
+   * Apply PostgreSQL Row Level Security as additional safeguard
+
+### Schema-Based Tenancy (Alternative)
+
+1. **Schema Design**
+   * Create separate PostgreSQL schema per tenant
+   * Use identical table structure across schemas
+   * Implement schema switching middleware
+   * Maintain global schema for shared data
+
+2. **Advantages**
+   * Stronger isolation between tenants
+   * No need for tenant filtering in queries
+   * Potential for tenant-specific schema modifications
+   * Direct mapping between schema and tenant
+
+3. **Implementation**
+   * Generate schema per tenant during onboarding
+   * Set `search_path` at connection time
+   * Create schema migration tooling
+   * Handle cross-schema queries for reporting
+
+## Tenant Context
+
+1. **Context Management**
+   * Create `TenantContext` class to hold current tenant
+   * Use async local storage for request-scoped context
+   * Implement middleware to extract and validate tenant
+   * Provide helper to access current tenant ID
+
+2. **Tenant Resolution**
+   * Extract tenant from multiple sources:
+     * JWT token claims
+     * Subdomain or custom domain
+     * Request header (`X-Tenant-ID`)
+     * Query parameter (admin/diagnostic only)
+   * Validate tenant exists and is active
+   * Cache tenant metadata for performance
+
+3. **Context Propagation**
+   * Automatically propagate tenant context to:
+     * Database queries
+     * Background jobs
+     * External API calls
+     * Cache keys
+   * Maintain context across async operations
+
+## Repository Layer
+
+1. **Tenant-Aware Repositories**
+   * Create base `TenantAwareRepository<T>` class
+   * Automatically inject tenant filter in all queries
+   * Provide explicit methods for cross-tenant operations
+   * Implement validation for tenant-specific operations
+
+2. **Query Generation**
+   ```typescript
+   // Example implementation with Prisma
+   class TenantAwareRepository<T> {
+     constructor(
+       private readonly prisma: PrismaClient,
+       private readonly tenantContext: TenantContextService,
+       private readonly model: string
+     ) {}
+
+     async findById(id: string): Promise<T | null> {
+       const tenantId = this.tenantContext.getCurrentTenantId();
+       return this.prisma[this.model].findFirst({
+         where: {
+           id,
+           tenantId,
+         },
+       });
+     }
+
+     // Other CRUD methods with tenant filtering
+   }
+   ```
+
+3. **Cross-Tenant Operations**
+   * Require explicit permission for cross-tenant queries
+   * Implement audit logging for all cross-tenant access
+   * Create dedicated services for legitimate cross-tenant operations
+   * Add safeguards to prevent accidental cross-tenant data exposure
+
+## Tenant Isolation
+
+1. **Data Isolation**
+   * Enforce tenant ID in all queries
+   * Validate tenant ownership before updates/deletes
+   * Implement database constraints for tenant isolation
+   * Add tenant validation in service layer as additional check
+
+2. **PostgreSQL Row Level Security**
+   ```sql
+   -- Example RLS policy for additional protection
+   ALTER TABLE "Product" ENABLE ROW LEVEL SECURITY;
+   
+   CREATE POLICY tenant_isolation_policy ON "Product"
+     USING (tenant_id = current_setting('app.tenant_id')::uuid);
+   ```
+
+3. **Partial Indexes**
+   * Create tenant-specific indexes for performance
+   * Example:
+     ```sql
+     CREATE INDEX idx_product_name ON "Product" (name)
+     WHERE tenant_id = 'specific-tenant-id';
+     ```
+   * Generate tenant-specific indexes for high-volume tenants
+   * Monitor and optimize index usage
+
+## Shared vs. Tenant-Specific Data
+
+1. **Data Classification**
+   * **Tenant-specific**: Data belonging to a single tenant
+     * Products, orders, customers, settings
+   * **Shared reference**: Read-only reference data shared by all tenants
+     * Countries, currencies, global tax rates
+   * **Platform**: Global platform data
+     * Tenants, users, billing, platform settings
+
+2. **Shared Data Access**
+   * Store shared data in global tables (no `tenantId`)
+   * Create read-only repositories for shared data
+   * Cache shared data for performance
+   * Implement tenant-specific overrides where needed
+
+3. **Implementation Example**
+   ```typescript
+   // Example with inheritance
+   abstract class BaseEntity {
+     id: string;
+     createdAt: Date;
+     updatedAt: Date;
+   }
+
+   // Shared entity (no tenant)
+   class Country extends BaseEntity {
+     code: string;
+     name: string;
+     // No tenantId
+   }
+
+   // Tenant-specific entity
+   class Product extends BaseEntity {
+     name: string;
+     price: number;
+     tenantId: string; // Required for tenant-specific data
+   }
+   ```
+
+## Tenant Management
+
+1. **Tenant Provisioning**
+   * Create tenant onboarding workflow
+   * Initialize tenant database structures
+   * Generate tenant-specific configuration
+   * Set up default data (categories, settings)
+
+2. **Tenant Configuration**
+   * Store tenant settings in database
+   * Support tenant-specific overrides of defaults
+   * Cache configuration for performance
+   * Implement configuration change propagation
+
+3. **Tenant Lifecycle**
+   * Support tenant state transitions:
+     * Trial → Active → Suspended → Terminated
+   * Implement data access based on tenant state
+   * Create data export for tenant offboarding
+   * Define data retention and deletion policies
+
+## Performance Considerations
+
+1. **Query Optimization**
+   * Include `tenantId` in all composite indexes
+   * Create specific indexes for common tenant queries
+   * Monitor query performance across tenants
+   * Identify and optimize tenant-specific bottlenecks
+
+2. **Caching Strategy**
+   * Include tenant ID in cache keys
+   * Implement tenant-aware cache invalidation
+   * Balance memory usage across tenants
+   * Consider per-tenant cache limits for fair resource allocation
+
+3. **Connection Pooling**
+   * Configure appropriate pool sizes
+   * Monitor connection usage by tenant
+   * Implement fair usage policies
+   * Consider tenant-specific connection pools for high-volume tenants
+
+By implementing these multi-tenancy patterns, we ensure proper data isolation between tenants while maintaining performance and scalability.

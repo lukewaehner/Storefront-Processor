@@ -1,0 +1,138 @@
+---
+description: Mobile experience strategy for progressive web apps and native apps
+globs: "frontend/**/*"
+alwaysApply: false
+---
+
+# Mobile Strategy
+
+Our mobile strategy focuses on delivering an optimal e-commerce experience across all devices, with an emphasis on Progressive Web Apps (PWAs) and a roadmap for native applications.
+
+## Progressive Web App Implementation
+
+### Core PWA Requirements
+
+1. **Installability**
+   * Valid web app manifest with proper icons
+   * HTTPS implementation
+   * Service worker for offline functionality
+   * Meet installability criteria for iOS and Android
+   * Implement install prompts at appropriate moments
+
+2. **Offline Capability**
+   * Cache critical assets and UI components
+   * Enable product browsing while offline
+   * Store cart data locally using IndexedDB
+   * Sync actions when connection is restored
+   * Provide clear offline indicators to users
+
+3. **Performance**
+   * Meet "Add to Home Screen" performance criteria
+   * First Contentful Paint < 1.5s on 4G
+   * Time to Interactive < 3s on 4G
+   * Smooth animations (60fps) and transitions
+
+### Service Worker Strategy
+
+1. **Caching Strategy**
+   * Use stale-while-revalidate for product images
+   * Cache-first for static assets (JS, CSS, fonts)
+   * Network-first for API calls with offline fallbacks
+   * Configure appropriate cache expiration
+
+2. **Background Syncing**
+   * Queue failed API requests when offline
+   * Retry with exponential backoff when online
+   * Provide user feedback about sync status
+   * Merge local and server state appropriately
+
+3. **Push Notifications**
+   * Order status updates
+   * Abandoned cart reminders
+   * Price drop alerts for wishlisted items
+   * Respect user preferences and local regulations
+
+## Mobile-First Design Principles
+
+1. **Touch Optimization**
+   * Minimum touch target size: 44x44px
+   * Appropriate spacing between interactive elements
+   * Implement swipe gestures where intuitive
+   * Support pull-to-refresh for content updates
+
+2. **Viewport Adaptation**
+   * Design mobile layouts first, then enhance for larger screens
+   * Use fluid layouts rather than fixed breakpoints when possible
+   * Optimize for both portrait and landscape orientations
+   * Test on various screen sizes and pixel densities
+
+3. **Mobile UI Patterns**
+   * Implement bottom navigation for primary actions
+   * Use sheets and modals appropriately
+   * Optimize forms for mobile input
+   * Consider thumb zones for important interactions
+
+## Native App Strategy (Future)
+
+### Cross-Platform Approach
+
+1. **Technology Selection**
+   * React Native for cross-platform development
+   * Reuse business logic between web and native
+   * Platform-specific UI components where necessary
+   * Bridge to PWA for faster initial development
+
+2. **Feature Parity**
+   * Ensure core shopping functionality in both web and native
+   * Add platform-specific enhancements where valuable
+   * Implement unified user accounts and state
+
+### Platform-Specific Features
+
+1. **iOS Enhancements**
+   * Apple Pay integration
+   * App Clips for instant experiences
+   * Handoff between devices
+   * Spotlight search integration
+
+2. **Android Enhancements**
+   * Google Pay integration
+   * App Actions and Slices
+   * Android widget support
+   * Intent handling for deep linking
+
+## Mobile-Specific Features
+
+1. **Location-Based Services**
+   * Store finder with map integration
+   * Location-based product recommendations
+   * Geofencing for store promotions
+   * Address autocomplete during checkout
+
+2. **Device Integration**
+   * Camera access for product scanning
+   * AR product visualization (where applicable)
+   * Contact picker for sharing
+   * Calendar integration for deliveries
+
+3. **Mobile Checkout Optimization**
+   * Digital wallet integration (Apple Pay, Google Pay)
+   * Simplified checkout forms
+   * SMS verification for faster login
+   * Persistent cart across devices
+
+## Testing & Quality Assurance
+
+1. **Device Testing**
+   * Test on real iOS and Android devices
+   * Cover various screen sizes and OS versions
+   * Test on both high and low-end devices
+   * Include tablet testing
+
+2. **Performance Testing**
+   * Test on throttled connections (3G, 4G)
+   * Monitor battery usage
+   * Test offline functionality
+   * Measure and optimize load times
+
+By following this mobile strategy, we ensure our e-commerce platform delivers an excellent experience across all devices while laying the groundwork for future native app development.

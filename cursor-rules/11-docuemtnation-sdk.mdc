@@ -1,0 +1,50 @@
+# Documentation & SDKs Notes
+
+## General Conventions
+
+### API Documentation
+- **GraphQL**: auto-generate schema docs via GraphQL Playground / Apollo Studio  
+- **REST**: annotate controllers with OpenAPI decorators (e.g. NestJS Swagger)  
+- **Hosting**: expose `/docs` endpoint (NestJS) or deploy static HTML
+
+### Component Library
+- **Tool**: Storybook for React components  
+- **Structure**: one story file per component, organized in `src/components`  
+- **Docs**: include usage examples, props tables, accessibility notes
+
+### Developer Onboarding
+- **README.md**:  
+  - Project overview & diagram  
+  - Quickstart (`npm ci && npm run dev`)  
+  - Testing & linting commands  
+- **Architecture Diagrams**: store in `docs/architecture.drawio.svg`  
+- **Quickstart Scripts**: `scripts/setup.sh` to provision local DB, cache, and run seeds
+
+### Changelog & Versioning
+- **Format**: Keep a Changelog (https://keepachangelog.com/)  
+- **Versioning**: Follow SemVer (MAJOR.MINOR.PATCH)  
+- **Automation**: generate changelog entries on merge via GitHub Action
+
+---
+
+## Roadmap / To-Do
+
+1. **API Docs**  
+   - [ ] Integrate Swagger module in NestJS  
+   - [ ] Configure GraphQL Playground with introspection  
+   - [ ] Add CI job to validate OpenAPI spec
+
+2. **Storybook Setup**  
+   - [ ] Install & configure Storybook in frontend repo  
+   - [ ] Write stories for core UI primitives (Button, Card, Modal)  
+   - [ ] Publish Storybook to Chromatic or Netlify
+
+3. **Onboarding Materials**  
+   - [ ] Flesh out `README.md` with diagrams and examples  
+   - [ ] Create `docs/` folder for architecture, domain models, and standards  
+   - [ ] Write `scripts/setup.sh` for local dev environment
+
+4. **Changelog & Releases**  
+   - [ ] Add `CHANGELOG.md` template  
+   - [ ] Configure GitHub Action to bump version and update changelog on release PR  
+   - [ ] Document release process in `docs/RELEASES.md`

@@ -1,0 +1,139 @@
+# CI/CD & Testing Notes
+
+## General Conventions
+
+### Continuous Integration (CI)
+
+- **Platform**: GitHub Actions  
+- **Triggers**:  
+  - `push` to `main`/`develop`  
+  - `pull_request` against protected branches  
+  - **Optional**: scheduled nightly build for dependency updates  
+- **Steps**:  
+  1. **Checkout**: `actions/checkout@v3`  
+  2. **Setup**: Node (LTS), Docker  
+  3. **Cache**: `node_modules`, Docker layers  
+  4. **Install**: `npm ci` (clean install)  
+  5. **Lint**: ESLint + Stylelint → fail on warnings  
+  6. **Test**:  
+     - **Unit** (Jest)  
+     - **Integration** (Supertest)  
+     - **Coverage** (collect & upload)  
+  7. **Build**: compile Next.js & NestJS  
+  8. **Docker**: `docker build` → push to registry (staging tag)  
+  9. **Notifications**: Slack/Teams on failure & success  
+- **Secrets Management**: GitHub Secrets for API keys, Docker registry creds  
+- **Status Badges**: Display build, test, and coverage statuses in `README.md`
+
+### Continuous Deployment (CD)
+
+- **Staging Deploy**:  
+  - Triggered on merge to `main`  
+  - Automatically deploy to staging cluster  
+- **Production Deploy**:  
+  - Manual approval job  
+  - Canary rollout → full rollout  
+- **Rollback Strategy**:  
+  - Retain last 2 stable images  
+  - Automate rollback on health-check failure  
+
+### Testing Strategy
+
+- **Test Pyramid**:  
+  - **Unit tests** (80%+) for pure logic  
+  - **Integration tests** (15–18%) for APIs & DB  
+  - **E2E tests** (<5%) for critical user flows  
+- **Tools**:  
+  - **Unit & Integration**: Jest + Supertest  
+  - **E2E**: Cypress (headless in CI)  
+  - **Mocks**: Nock for HTTP, Testcontainers for ephemeral databases  
+- **Code Coverage**:  
+  - Collect with Jest/`nyc`  
+  - Enforce thresholds (e.g. 80% lines, 75% functions)  
+  - Upload reports to Codecov or Coveralls  
+- **Lint & Formatting**:  
+  - ESLint + Prettier for TypeScript  
+  - Stylelint for CSS/Tailwind  
+- **Security Scans**:  
+  - Dependabot alerts + auto-PRs  
+  - GitHub CodeQL scans  
+  - Snyk vulnerability checks  
+
+### Best Practices & Safety
+
+- **Fail Fast**: break the pipeline on lint/test/security scan failures  
+- **Isolation**: use in-memory or ephemeral test databases; reset state between tests  
+- **Secrets**: never commit credentials; use vaults or secrets managers  
+- **Pipeline Speed**:  
+  - Cache aggressively  
+  - Parallelize independent jobs  
+  - Keep E2E suite minimal and focused  
+- **Auditability**: retain logs/artifacts for every run; enable artifact uploads (test reports, coverage)
+
+---
+
+## Roadmap / To-Do
+
+### 1. CI Pipeline Setup
+
+- [ ] Create `.github/workflows/ci.yml`  
+- [ ] Configure triggers: `push`, `pull_request`, scheduled  
+- [ ] Add steps: checkout, setup, cache, install, lint, test, coverage, build, docker build & push  
+- [ ] Add Slack/Teams notification actions  
+- [ ] Add status badges to `README.md`
+
+### 2. Unit & Integration Tests
+
+- [ ] Initialize Jest + Supertest configs  
+- [ ] Write unit tests for core business logic modules  
+- [ ] Write integration tests for REST/GraphQL endpoints  
+- [ ] Configure test database (SQLite in-memory or Dockerized Postgres)  
+- [ ] Set up mocks for external services (Stripe, S3, Twilio)
+
+### 3. Code Quality & Security Scans
+
+- [ ] Integrate ESLint, Prettier, Stylelint in CI  
+- [ ] Configure Dependabot for dependency updates  
+- [ ] Add GitHub CodeQL scanning job  
+- [ ] Add Snyk or similar vulnerability scan
+
+### 4. Coverage & Reporting
+
+- [ ] Add coverage collection in Jest  
+- [ ] Enforce coverage thresholds in CI  
+- [ ] Upload reports to Codecov/Coveralls  
+- [ ] Display coverage badge in `README.md`
+
+### 5. Docker & Artifact Management
+
+- [ ] Write Dockerfile(s) for frontend & backend  
+- [ ] Configure GitHub Actions to build & push images  
+- [ ] Tag images by branch (`staging`, `prod`)  
+- [ ] Store images in container registry (e.g. ECR, Docker Hub)
+
+### 6. Deployment Workflows
+
+- [ ] Create `.github/workflows/deploy-staging.yml`  
+- [ ] Automate staging deployment on `main` merges  
+- [ ] Create `.github/workflows/deploy-prod.yml` with manual approval  
+- [ ] Implement health-checks and canary rollout steps  
+- [ ] Document rollback procedure
+
+### 7. E2E Testing
+
+- [ ] Set up Cypress config & folder structure  
+- [ ] Write smoke tests:  
+  - User signup/login  
+  - Product listing & checkout  
+- [ ] Add Cypress run to CI (headless, record artifacts)
+
+### 8. Maintenance & Monitoring
+
+- [ ] Schedule weekly dependency-update runs  
+- [ ] Monitor CI pipeline duration & failures  
+- [ ] Archive stale artifacts after 30 days  
+- [ ] Review & prune workflows quarterly
+
+---
+
+_Keep this file updated as the CI/CD process evolves and as new testing requirements or tools are adopted._  

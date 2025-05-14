@@ -1,0 +1,220 @@
+# File & Asset Storage, Infrastructure & DevOps Notes
+
+## Tech Stack & Conventions
+
+### File & Asset Storage
+
+- **Object Storage:** AWS S3
+
+  - Buckets per environment (e.g., `storefront-dev-assets`, `storefront-prod-assets`).
+  - Organize by tenant prefix: `tenantId/images/…`, `tenantId/logos/…`.
+  - Enable **versioning** for recoverability.
+  - Configure **lifecycle rules** to migrate old assets to Glacier and expire temp files.
+
+- **CDN:** AWS CloudFront or Vercel Edge Network
+
+  - Serve S3 assets via CDN for low latency.
+  - Invalidate caches on logo/theme updates or deploys.
+
+- **Image Optimization:**
+
+  - Use Next.js `<Image>` component or Imgix for responsive formats (WebP, AVIF).
+  - Automate runtime resizing via Lambda\@Edge or on-the-fly transforms.
+
+### Infrastructure & DevOps
+
+- **Containerization:**
+
+  - Docker for each service (frontend, backend, worker).
+  - Keep images slim (use `node:18-alpine`, multi-stage builds).
+
+- **Orchestration:**
+
+  - Kubernetes on AWS EKS or AWS ECS/Fargate.
+  - Use Helm charts or AWS CDK to define services, deployments, and autoscaling.
+
+- **Infrastructure as Code (IaC):** Terraform (AWS provider)
+
+  - Define VPC, subnets, RDS, ElastiCache, EKS/ECS, S3, IAM roles.
+  - Store state securely (S3 + DynamoDB locking).
+
+- **Secrets Management:** AWS Secrets Manager or HashiCorp Vault
+
+  - Store DB credentials, Stripe keys, S3 access, JWT signing keys.
+  - Use IAM roles for service-to-service access.
+
+- **Logging & Observability:**
+
+  - **Logging:** Fluentd or Fluent Bit to push container logs to CloudWatch or ELK.
+  - **Monitoring:** Prometheus + Grafana for metrics; AWS CloudWatch metrics for infra.
+  - **Tracing:** Jaeger or AWS X-Ray for distributed tracing.
+
+- **Networking & Security:**
+
+  - Use AWS ALB or NGINX Ingress with TLS certificates (cert-manager + Let's Encrypt).
+  - Enforce network policies: private subnets for backend & database.
+  - WAF rules for common exploits (SQLi, XSS).
+
+- **Cost Management:**
+
+  - Tag resources by project and environment.
+  - Set budgets & alerts in AWS Cost Explorer.
+
+## Security & Best Practices
+
+- **Immutable Infrastructure:** deploy via CI/CD; no manual changes.
+- **Shift-Left Security:** integrate SAST/DAST scans (Snyk, OWASP ZAP) in pipeline.
+- **Autoscaling & Resilience:**
+
+  - Horizontal Pod Autoscaler (HPA) on CPU/memory metrics.
+  - Readiness & liveness probes for Kubernetes.
+
+- **Backup & DR:**
+
+  - RDS automated snapshots; test restore quarterly.
+  - S3 cross-region replication for critical buckets.
+
+- **Access Control:**
+
+  - Use IAM roles with least privilege.
+  - Enforce MFA for admin consoles.
+
+## Disaster Recovery & Business Continuity
+
+- **Recovery Objectives:**
+
+  - **RTO (Recovery Time Objective)**: 4 hours for critical services, 24 hours for non-critical.
+  - **RPO (Recovery Point Objective)**: 15 minutes data loss maximum.
+
+- **Backup Strategy:**
+
+  - Database: Point-in-time recovery with transaction logs + daily snapshots.
+  - File Storage: S3 cross-region replication with versioning enabled.
+  - Configuration: Infrastructure as Code in version control; environment config in SecretManager with replication.
+
+- **DR Environment:**
+
+  - Maintain warm standby in secondary region (reduced capacity but ready to scale).
+  - Regular DR testing schedule (quarterly full-recovery drill).
+  - Automated recovery playbooks and runbooks.
+
+- **Failover Strategy:**
+
+  - Database: Promote read replica in secondary region.
+  - DNS: Route 53 health checks with automated failover.
+  - Load balancers: Regional failover configuration.
+
+- **Business Continuity:**
+  - Define critical vs. non-critical services for prioritized recovery.
+  - Document manual fallback procedures for partial outages.
+  - Establish communication plan for outage notifications.
+
+## SLAs & Uptime Guarantees
+
+- **Platform SLA Tiers:**
+
+  - **Standard**: 99.9% monthly uptime (43 minutes downtime/month).
+  - **Premium**: 99.95% monthly uptime (22 minutes downtime/month).
+  - **Enterprise**: 99.99% monthly uptime (4.3 minutes downtime/month).
+
+- **Service Definitions:**
+
+  - Downtime: Services unavailable for >1 minute as measured by external monitoring.
+  - Scheduled maintenance: Excluded from SLA calculations; performed during designated windows.
+  - Degraded performance: <50% increase in response time is not considered downtime.
+
+- **Incident Response:**
+
+  - Severity 1 (Critical): 15-minute response, 4-hour resolution target.
+  - Severity 2 (High): 1-hour response, 8-hour resolution target.
+  - Severity 3 (Medium): 4-hour response, 24-hour resolution target.
+
+- **SLA Reporting:**
+
+  - Monthly uptime reports for tenants.
+  - Historical uptime dashboard in admin portal.
+  - Automatic notification of SLA violations.
+
+- **Compensation:**
+  - Service credits calculated as percentage of monthly fee:
+    - <99.9%: 10% credit
+    - <99.5%: 25% credit
+    - <99.0%: 50% credit
+  - Credit request process automated through tenant portal.
+
+---
+
+# Roadmap / To-Do List
+
+1. **S3 & CDN Setup**
+
+   - Create S3 buckets for each environment; enable versioning.
+   - Configure CloudFront distributions and DNS.
+   - Validate URL patterns and caching headers.
+
+2. **Dockerization**
+
+   - Write Dockerfiles for frontend, backend, and worker.
+   - Set up multi-stage builds and environment-specific tags.
+
+3. **Kubernetes/ECS Configuration**
+
+   - Define manifests (Deployments, Services, Ingress) or ECS Task Definitions.
+   - Configure autoscaling rules and resource requests/limits.
+
+4. **Terraform Infrastructure**
+
+   - Scaffold Terraform modules for networking (VPC, subnets).
+   - Add modules for EKS/ECS, RDS, ElastiCache, S3.
+   - Apply in dev; iterate to staging and prod.
+
+5. **Secrets Integration**
+
+   - Store secrets in AWS Secrets Manager.
+   - Update services to fetch secrets via IAM roles.
+
+6. **CI/CD Pipeline**
+
+   - Extend GitHub Actions to build, scan, and deploy Docker images.
+   - Integrate Terraform plan/apply steps.
+   - Add testing and approval gates for prod.
+
+7. **Logging & Monitoring**
+
+   - Deploy Prometheus & Grafana stacks.
+   - Configure Fluent Bit to stream logs.
+   - Define alert rules for high error rates, CPU spikes.
+
+8. **Tracing & Debugging**
+
+   - Integrate OpenTelemetry in services.
+   - Deploy Jaeger collector and UI.
+
+9. **Security Scans**
+
+   - Add Snyk or Dependabot scanning in pipeline.
+   - Schedule weekly DAST scans against staging.
+
+10. **Backup & Replication**
+
+    - Enable RDS snapshots & cross-region replication.
+    - Test restore procedures in staging.
+
+11. **Cost & Tagging**
+
+    - Tag all IaC resources.
+    - Set AWS budgets and configure cost alerts.
+
+12. **Disaster Recovery Planning**
+
+    - Document DR procedures in detail.
+    - Implement cross-region replication for critical services.
+    - Establish recovery testing schedule and process.
+
+13. **SLA Documentation**
+
+    - Define formal SLA terms for each tenant tier.
+    - Implement uptime monitoring and reporting.
+    - Create SLA violation notification system.
+
+---

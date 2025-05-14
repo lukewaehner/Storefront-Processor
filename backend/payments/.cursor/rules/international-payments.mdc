@@ -1,0 +1,192 @@
+---
+description: International payment processing guidelines
+globs: "backend/payments/**/*"
+alwaysApply: false
+---
+
+# International Payment Processing
+
+This document outlines the implementation details for supporting international payments, multiple currencies, and country-specific payment methods in our e-commerce platform.
+
+## Multi-Currency Support
+
+### Currency Management
+
+1. **Supported Currencies**
+   * Primary: USD, EUR, GBP, CAD, AUD
+   * Secondary: JPY, CNY, INR, BRL, MXN
+   * Total support for 135+ currencies via Stripe
+   * Store currency support settings per tenant
+
+2. **Currency Storage**
+   * Store prices in merchant's base currency
+   * Save currency code with all monetary values
+   * Use integer representation (cents/minor units)
+   * Include exchange rate snapshot with orders
+
+3. **Exchange Rate Handling**
+   * Integrate with exchange rate API (Stripe or dedicated provider)
+   * Cache rates with hourly/daily updates
+   * Allow manual rate override for merchants
+   * Store historical rates for reporting
+
+### Pricing Implementation
+
+1. **Display Currency Conversion**
+   * Convert prices on-the-fly for display
+   * Clearly indicate converted prices are estimates
+   * Allow users to select preferred display currency
+   * Remember currency preference per user
+
+2. **Checkout Currency Options**
+   * Let customers pay in merchant's currency (default)
+   * Option to pay in customer's local currency
+   * Clearly display conversion fees when applicable
+   * Show currency conversion disclaimer
+
+3. **Price Rounding Strategies**
+   * Implement psychologically attractive rounding
+   * Configure rounding rules by currency and price point
+   * Consider cultural pricing expectations
+   * Maintain consistency across product catalog
+
+## Regional Payment Methods
+
+### Payment Method Framework
+
+1. **Method Registration**
+   * Create extensible registry of payment methods
+   * Define capabilities and limitations per method
+   * Group methods by region and type
+   * Set availability based on merchant/customer location
+
+2. **Frontend Integration**
+   * Dynamic method loading in checkout
+   * Method-specific input components
+   * Localized instructions and branding
+   * Responsive design for all methods
+
+3. **Activation Workflow**
+   * Allow merchants to enable/disable methods
+   * Guide setup for methods requiring additional information
+   * Test mode for new payment methods
+   * Automated activation based on sales region
+
+### Regional Method Implementation
+
+1. **Europe**
+   * SEPA Direct Debit integration
+   * Sofort for German-speaking markets
+   * iDEAL for Netherlands
+   * Bancontact for Belgium
+   * P24 for Poland
+
+2. **Asia Pacific**
+   * Alipay and WeChat Pay for China
+   * PayPay for Japan
+   * GrabPay for Southeast Asia
+   * UPI for India
+   * BECS Direct Debit for Australia
+
+3. **Latin America**
+   * Boleto Bancário for Brazil
+   * OXXO for Mexico
+   * PSE for Colombia
+   * Mercado Pago integration
+   * Local card processors
+
+4. **North America**
+   * ACH Direct Debit
+   * Canadian-specific methods (Interac)
+   * Buy-Now-Pay-Later options
+   * Digital wallets (Apple Pay, Google Pay)
+
+## Tax & Regulatory Compliance
+
+### Tax Calculation
+
+1. **Tax Provider Integration**
+   * Primary: TaxJar or Avalara
+   * Calculate tax based on:
+     * Customer location
+     * Merchant location
+     * Product category
+     * Order value
+   * Support for tax-exempt customers
+
+2. **VAT Handling**
+   * Collect and validate VAT registration numbers
+   * Apply reverse charge when appropriate
+   * Generate VAT-compliant invoices
+   * Support different VAT rates by product type
+   * Handle destination vs. origin-based VAT
+
+3. **Sales Tax**
+   * US state and local tax calculations
+   * Canadian GST/HST/PST
+   * Australian GST
+   * Tax nexus determination
+   * Tax holiday support
+
+### Compliance Documentation
+
+1. **Invoice Generation**
+   * Create legally compliant invoices for each region
+   * Include required VAT/tax information
+   * Support multiple languages and formats
+   * Digital signatures where required
+   * Proper invoice numbering scheme
+
+2. **Regulatory Reports**
+   * Generate tax filing reports
+   * MOSS/OSS reporting for EU VAT
+   * Intrastat reporting
+   * Sales tax return data
+   * Transaction logs for auditing
+
+## Cross-Border Considerations
+
+1. **Address Formatting**
+   * Support international address formats
+   * Country-specific validation rules
+   * Postal code format validation
+   * Transliteration options for addresses
+
+2. **Customs & Duties**
+   * Calculate and collect import duties
+   * Generate customs documentation
+   * HS code assignment to products
+   * DDP (Delivered Duty Paid) support
+   * Return handling for international orders
+
+3. **Payment Acceptance Rate Optimization**
+   * Local acquiring when available
+   * Intelligent routing based on card BIN
+   * Retry logic with alternative processors
+   * Step-up authentication when needed
+   * Decline recovery strategies
+
+## Implementation Components
+
+1. **Core Services**
+   * `CurrencyService`: Exchange rate management
+   * `PaymentMethodService`: Method registration and handling
+   * `TaxService`: Tax calculation and reporting
+   * `ComplianceService`: Regulatory document generation
+   * `CustomsService`: Duty calculation and documentation
+
+2. **Database Entities**
+   * `Currency`: Currency definitions and configurations
+   * `ExchangeRate`: Historical exchange rates
+   * `PaymentMethod`: Available payment method data
+   * `TaxRate`: Tax rates by region and category
+   * `CustomsProfile`: Customs information for products
+
+3. **Integration Points**
+   * Extend `PaymentProvider` interface for regional methods
+   * Implement currency conversion middleware
+   * Create tax calculation hook in checkout flow
+   * Add customs documentation to fulfillment process
+   * Extend order confirmation with localized information
+
+By implementing these international payment processing features, we enable our platform tenants to sell globally with appropriate payment methods, tax handling, and regulatory compliance.

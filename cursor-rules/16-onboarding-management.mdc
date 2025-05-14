@@ -1,0 +1,136 @@
+# Tenant Onboarding & Management Notes
+
+## General Conventions
+
+### Tenant Lifecycle
+
+- **Signup & Registration**:
+  - Self-service registration flow
+  - Manual verification for KYC/fraud prevention
+  - Staged onboarding with guided checklist
+- **Provisioning**:
+  - Automated database initialization
+  - Default theme & settings application
+  - Sample product catalog (optional)
+- **Management**:
+  - Billing & subscription handling
+  - Feature tier enforcement
+  - Usage monitoring & quota management
+- **Offboarding**:
+  - Data export options pre-termination
+  - Soft-delete with 30-day recovery window
+  - Hard delete with compliance-based data retention
+
+### Multi-Tenancy Model
+
+- **Data Isolation**:
+  - Row-level tenant filtering via `tenantId`
+  - Database query middleware to enforce isolation
+  - Service-level authorization checks
+- **Resource Allocation**:
+  - Tenant-specific rate limits
+  - Resource quotas by subscription tier
+  - Noisy neighbor protection
+- **Customization Boundaries**:
+  - Visual theming (colors, fonts, logos)
+  - URL/domain configuration
+  - Store settings (currency, tax rates, shipping)
+  - Workflow customization within defined limits
+
+### Tenant Subscription Tiers
+
+- **Basic**:
+  - Up to 100 products
+  - Single admin user
+  - Standard storefront features
+  - Default payment methods
+- **Professional**:
+  - Up to 1,000 products
+  - 5 staff accounts
+  - Advanced analytics
+  - All payment methods
+  - Custom domain
+- **Enterprise**:
+  - Unlimited products
+  - Unlimited staff accounts
+  - White-label capabilities
+  - API access
+  - Dedicated support
+  - Custom development options
+
+## Support & SLAs
+
+### Support Channels
+
+- **Basic**:
+  - Email support (48-hour response)
+  - Knowledge base access
+- **Professional**:
+  - Email support (24-hour response)
+  - Live chat during business hours
+  - Phone support for critical issues
+- **Enterprise**:
+  - Email support (4-hour response)
+  - 24/7 live chat and phone support
+  - Dedicated account manager
+  - Quarterly business reviews
+
+### SLA Commitments
+
+- **Uptime Guarantees**:
+  - Basic: 99.9% monthly uptime
+  - Professional: 99.95% monthly uptime
+  - Enterprise: 99.99% monthly uptime
+- **Incident Response**:
+  - Basic: 24-hour response to critical incidents
+  - Professional: 8-hour response to critical incidents
+  - Enterprise: 2-hour response to critical incidents
+- **Maintenance Windows**:
+  - Scheduled during low-traffic periods
+  - Advance notification (7 days for Basic/Professional, 14 days for Enterprise)
+  - Option for maintenance bypass for Enterprise customers
+
+---
+
+## Roadmap / To-Do
+
+1. **Tenant Registration Flow**
+
+   - [ ] Design and implement signup form with validation
+   - [ ] Create verification process for new tenants
+   - [ ] Build guided onboarding checklist
+
+2. **Automated Provisioning**
+
+   - [ ] Develop database initialization script
+   - [ ] Create default theme application service
+   - [ ] Build sample data import tool
+
+3. **Tenant Dashboard**
+
+   - [ ] Design admin interface for tenant management
+   - [ ] Implement subscription and billing management
+   - [ ] Create usage metrics dashboard
+
+4. **Multi-Tenancy Implementation**
+
+   - [ ] Implement tenant context middleware
+   - [ ] Create database query filters for tenant isolation
+   - [ ] Build rate limiting service with tenant tiers
+
+5. **Subscription Management**
+
+   - [ ] Integrate with billing provider (Stripe Billing)
+   - [ ] Implement feature flag system based on subscription
+   - [ ] Create upgrade/downgrade flows
+
+6. **Tenant Offboarding**
+
+   - [ ] Design data export service
+   - [ ] Implement soft-delete functionality
+   - [ ] Create compliance-based data retention system
+
+7. **Support System**
+   - [ ] Integrate help desk software
+   - [ ] Build knowledge base structure
+   - [ ] Create SLA monitoring and reporting

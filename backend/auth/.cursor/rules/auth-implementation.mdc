@@ -1,0 +1,203 @@
+---
+description: Authentication and authorization implementation guidelines
+globs: "backend/auth/**/*"
+alwaysApply: true
+---
+
+# Authentication Implementation
+
+This document outlines the implementation details for the authentication and authorization system in our multi-tenant e-commerce platform.
+
+## Identity Provider Strategy
+
+### Provider Options
+
+1. **Custom JWT Implementation**
+   * NestJS JWT module (`@nestjs/jwt`)
+   * Asymmetric key signing (RS256)
+   * Tenant-specific signing keys
+   * Centralized auth service pattern
+
+2. **Third-Party Integration** (alternative)
+   * Auth0 or Keycloak for larger deployments
+   * OAuth2/OpenID Connect flows
+   * Custom claim mapping for multi-tenancy
+   * Single Sign-On capabilities
+
+## Authentication Flows
+
+### Standard Authentication
+
+1. **Registration Flow**
+   * Endpoint: `POST /auth/signup`
+   * Validate email uniqueness per tenant
+   * Hash password with bcrypt (cost factor ≥ 12)
+   * Generate verification token
+   * Send verification email
+   * Return user object (without credentials)
+
+2. **Email Verification**
+   * Endpoint: `GET /auth/verify-email?token=xyz`
+   * Validate token and expiration
+   * Mark user as verified
+   * Redirect to login page
+   * Handle token expiration gracefully
+
+3. **Login Flow**
+   * Endpoint: `POST /auth/login`
+   * Validate credentials
+   * Check account status (active, verified)
+   * Generate JWT and refresh token
+   * Set cookies:
+     * Access token: HttpOnly, Secure, SameSite=Strict, short TTL (15m)
+     * Refresh token: HttpOnly, Secure, SameSite=Strict, longer TTL (7d)
+   * Return user object and token metadata
+
+4. **Token Refresh**
+   * Endpoint: `POST /auth/refresh`
+   * Validate refresh token
+   * Check token in revocation list
+   * Issue new access token and refresh token
+   * Revoke old refresh token (rotation pattern)
+   * Update cookies
+
+5. **Logout**
+   * Endpoint: `POST /auth/logout`
+   * Add refresh token to revocation list
+   * Clear auth cookies
+   * Invalidate server-side session (if applicable)
+
+### Social Authentication (Optional)
+
+1. **OAuth2 Integration**
+   * Endpoints: `/auth/google`, `/auth/facebook`, etc.
+   * Create OAuth2 strategy for each provider
+   * Link social accounts to existing users
+   * Handle first-time social logins
+   * Normalize profile data between providers
+
+2. **Handling OAuth Callbacks**
+   * Endpoint: `/auth/callback/{provider}`
+   * Validate state parameter to prevent CSRF
+   * Extract profile information
+   * Create or update user record
+   * Perform standard login (JWT issuance)
+
+## Authorization Framework
+
+### Role-Based Access Control (RBAC)
+
+1. **Role Hierarchy**
+   * `platformAdmin`: Global administrator (cross-tenant)
+   * `tenantAdmin`: Administrator for specific tenant
+   * `tenantStaff`: Staff member with limited permissions
+   * `customer`: End user of a tenant's storefront
+
+2. **Permission Matrix**
+   * Define permissions by resource and action:
+     * `product:read`, `product:write`, `product:delete`
+     * `order:read`, `order:write`, `order:fulfill`
+     * `user:read`, `user:write`, `user:delete`
+   * Map permissions to roles
+
+3. **Implementation**
+   * Create `RolesGuard` extending NestJS `CanActivate`
+   * Create `@Roles(...)` and `@Permissions(...)` decorators
+   * Implement in controller routes or method level
+   * Check against JWT claims
+
+### Multi-Tenancy Enforcement
+
+1. **Tenant Context**
+   * Extract tenant from:
+     * JWT claims (`tenantId`)
+     * Subdomain or custom domain
+     * Request header (`X-Tenant-ID`)
+   * Validate tenant exists and is active
+   * Store in request context for downstream use
+
+2. **Resource Isolation**
+   * Automatically filter queries by tenant
+   * Validate cross-tenant operations
+   * Implement tenant middleware
+   * Create tenant-aware repositories
+
+## Token Management
+
+### JWT Structure
+
+1. **Claims**
+   * Standard claims:
+     * `iss`: Issuer (our auth service URL)
+     * `sub`: Subject (user ID)
+     * `aud`: Audience (API URL)
+     * `exp`: Expiration time
+     * `iat`: Issued at time
+     * `jti`: JWT ID (for revocation)
+   * Custom claims:
+     * `tenantId`: Current tenant context
+     * `roles`: Array of user roles
+     * `permissions`: Array of granted permissions
+     * `scope`: OAuth2 scopes (if applicable)
+
+2. **Signing and Verification**
+   * Generate and store RS256 keypairs
+   * Rotate keys periodically (90 days)
+   * Implement key ID (`kid`) in JWT header
+   * Support multiple active keys during rotation
+
+### Refresh Token Handling
+
+1. **Token Storage**
+   * Store refresh token hashes in database
+   * Track metadata: user ID, IP, device info, expiry
+   * Implement token families for rotation tracking
+   * Index for efficient lookup
+
+2. **Revocation Strategy**
+   * Revoke tokens on:
+     * Password change
+     * Explicit logout
+     * Suspicious activity
+     * Account status change
+   * Implement token reuse detection
+   * Expire tokens by TTL
+
+## Security Measures
+
+1. **Brute Force Protection**
+   * Rate limiting on login attempts
+   * Account lockout after threshold
+   * Increasing delays between attempts
+   * Notify users of failed login attempts
+
+2. **Multi-Factor Authentication**
+   * TOTP implementation (RFC 6238)
+   * Store TOTP secret encrypted
+   * Generate and validate backup codes
+   * Remember trusted devices option
+
+3. **Session Security**
+   * Validate IP continuity
+   * Check device fingerprint
+   * Monitor for simultaneous sessions
+   * Implement absolute session timeouts
+
+## Technical Implementation
+
+1. **Core Components**
+   * `AuthModule`: Main module for authentication
+   * `AuthController`: API endpoints
+   * `AuthService`: Business logic
+   * `JwtStrategy`: Passport strategy for JWT
+   * `RolesGuard`: Authorization guard
+   * `TenantMiddleware`: Tenant extraction middleware
+
+2. **Database Entities**
+   * `User`: Basic user information
+   * `UserCredential`: Authentication credentials 
+   * `RefreshToken`: Token tracking and revocation
+   * `LoginAttempt`: Track login successes/failures
+   * `MfaSettings`: Multi-factor authentication configuration
+
+By implementing this authentication and authorization system, we ensure secure, multi-tenant access control throughout the platform.

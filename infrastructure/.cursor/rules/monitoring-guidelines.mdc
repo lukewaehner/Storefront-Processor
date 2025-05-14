@@ -1,0 +1,515 @@
+---
+description: Monitoring, logging, and alerting guidelines
+globs: "infrastructure/**/*"
+alwaysApply: false
+---
+
+# Monitoring, Logging & Alerting
+
+This document outlines the implementation details for monitoring, logging, and alerting in our multi-tenant e-commerce platform.
+
+## Monitoring Strategy
+
+### Metrics Collection
+
+1. **Infrastructure Metrics**
+   * **Compute**: CPU, memory, disk, network
+   * **Database**: Connections, query times, locks, replication lag
+   * **Cache**: Hit rate, evictions, memory usage
+   * **Storage**: Utilization, IOPS, latency
+   * **Network**: Throughput, errors, packet loss
+
+2. **Application Metrics**
+   * **Request metrics**: Rate, duration, error rate
+   * **Business metrics**: Orders, users, revenue
+   * **Dependency metrics**: External API calls, latency
+   * **Custom metrics**: Cart abandonment, conversion rate
+   * **SLA metrics**: Availability, response time
+
+3. **Implementation Approach**
+   * Use Prometheus for metrics collection
+   * Configure exporters or agents for each component
+   * Define consistent naming convention:
+     * `app_<service>_<metric_name>_{count|duration|total}`
+   * Apply labels for dimensions:
+     * `tenant_id`, `environment`, `service`, `instance`
+   * Store metrics with appropriate retention periods
+
+### Prometheus Configuration
+
+1. **Service Discovery**
+   * Use Kubernetes service discovery or EC2 auto-discovery
+   * Label-based target selection
+   * Automated scrape configuration
+   * Example Prometheus configuration:
+     ```yaml
+     global:
+       scrape_interval: 15s
+       evaluation_interval: 15s
+     
+     scrape_configs:
+       - job_name: 'api-services'
+         kubernetes_sd_configs:
+           - role: pod
+         relabel_configs:
+           - source_labels: [__meta_kubernetes_pod_label_app]
+             action: keep
+             regex: api-.*
+           - source_labels: [__meta_kubernetes_pod_label_tenant_id]
+             target_label: tenant_id
+           - source_labels: [__meta_kubernetes_pod_container_port_name]
+             action: keep
+             regex: metrics
+     
+       - job_name: 'node-exporter'
+         kubernetes_sd_configs:
+           - role: node
+         relabel_configs:
+           - source_labels: [__meta_kubernetes_node_name]
+             target_label: instance
+     
+       - job_name: 'database'
+         static_configs:
+           - targets: ['postgres-exporter:9187']
+         metrics_path: /metrics
+     ```
+
+2. **Custom Metrics**
+   * Implement Prometheus client in application code
+   * Create custom collectors for business metrics
+   * Define appropriate bucket sizes for histograms
+   * Example code for Node.js:
+     ```typescript
+     import { register, Counter, Histogram } from 'prom-client';
+     
+     // Create a counter metric
+     const orderCounter = new Counter({
+       name: 'app_orders_total',
+       help: 'Total number of orders placed',
+       labelNames: ['tenant_id', 'status'],
+     });
+     
+     // Create a histogram metric
+     const checkoutDuration = new Histogram({
+       name: 'app_checkout_duration_seconds',
+       help: 'Time taken to complete checkout process',
+       labelNames: ['tenant_id', 'payment_method'],
+       buckets: [0.1, 0.5, 1, 2, 5, 10],
+     });
+     
+     // Example usage in checkout service
+     export class CheckoutService {
+       async createOrder(orderData, tenantId) {
+         const start = Date.now();
+         try {
+           const order = await this.orderRepository.create(orderData);
+           orderCounter.inc({ tenant_id: tenantId, status: 'completed' });
+           checkoutDuration.observe(
+             { tenant_id: tenantId, payment_method: orderData.paymentMethod },
+             (Date.now() - start) / 1000
+           );
+           return order;
+         } catch (error) {
+           orderCounter.inc({ tenant_id: tenantId, status: 'failed' });
+           throw error;
+         }
+       }
+     }
+     
+     // Expose metrics endpoint
+     app.get('/metrics', async (req, res) => {
+       res.set('Content-Type', register.contentType);
+       res.end(await register.metrics());
+     });
+     ```
+
+## Logging Framework
+
+### Log Structure
+
+1. **JSON Structured Logging**
+   * Standardized field names
+   * Consistent timestamp format (ISO 8601)
+   * Mandatory fields:
+     * `timestamp`: Event time
+     * `level`: Log level (debug, info, warn, error)
+     * `service`: Service name
+     * `tenant_id`: Tenant identifier
+     * `correlation_id`: Request trace ID
+     * `message`: Human-readable description
+   * Optional context fields as needed
+
+2. **Log Levels**
+   * **ERROR**: Errors that require immediate attention
+   * **WARN**: Potential issues or degraded functionality
+   * **INFO**: Normal operations and business events
+   * **DEBUG**: Detailed information for troubleshooting
+   * **TRACE**: Very detailed debugging (development only)
+
+3. **Example Log Format**
+   ```json
+   {
+     "timestamp": "2023-05-15T08:12:34.567Z",
+     "level": "info",
+     "service": "order-service",
+     "tenant_id": "tenant-123",
+     "correlation_id": "5f4c8a9b-3d21-4b5e-9f2a-7c6b8d3e1a2f",
+     "message": "Order created successfully",
+     "order_id": "order-456",
+     "user_id": "user-789",
+     "amount": 99.95,
+     "items_count": 3
+   }
+   ```
+
+### Logging Implementation
+
+1. **Application Logging**
+   * Use structured logging libraries:
+     * Node.js: Winston or Pino
+     * Frontend: Browser console + remote logging
+   * Configure log transport to stdout/stderr
+   * Add context middleware for request-scoped fields
+   * Example Winston configuration:
+     ```typescript
+     import winston from 'winston';
+     
+     const logger = winston.createLogger({
+       level: process.env.LOG_LEVEL || 'info',
+       format: winston.format.combine(
+         winston.format.timestamp(),
+         winston.format.json()
+       ),
+       defaultMeta: { service: 'order-service' },
+       transports: [
+         new winston.transports.Console(),
+       ],
+     });
+     
+     // Add request context middleware
+     app.use((req, res, next) => {
+       req.logger = logger.child({
+         correlation_id: req.headers['x-correlation-id'] || uuidv4(),
+         tenant_id: req.headers['x-tenant-id'],
+         user_id: req.user?.id,
+       });
+       next();
+     });
+     
+     // Usage in route handler
+     app.post('/orders', (req, res) => {
+       req.logger.info('Creating new order', { 
+         items_count: req.body.items.length 
+       });
+       // Process order...
+     });
+     ```
+
+2. **Log Collection Pipeline**
+   * Use Fluent Bit or Fluentd as log collector
+   * Forward logs to Elasticsearch or CloudWatch
+   * Configure log rotation for local files
+   * Add log enrichment where needed
+   * Example Fluent Bit configuration:
+     ```ini
+     [SERVICE]
+         Flush         1
+         Log_Level     info
+     
+     [INPUT]
+         Name              tail
+         Path              /var/log/containers/*.log
+         Parser            docker
+         Tag               kube.*
+         Refresh_Interval  10
+     
+     [FILTER]
+         Name                kubernetes
+         Match               kube.*
+         Kube_URL            https://kubernetes.default.svc:443
+         Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+         Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+     
+     [OUTPUT]
+         Name            es
+         Match           *
+         Host            elasticsearch
+         Port            9200
+         Index           app-logs-${TENANT_ID}-%Y.%m.%d
+         Type            _doc
+         Logstash_Format On
+         Logstash_Prefix app-logs
+         Retry_Limit     False
+     ```
+
+3. **Log Storage & Retention**
+   * Store logs in Elasticsearch or CloudWatch
+   * Configure index lifecycle management
+   * Set retention based on data category:
+     * Error logs: 90 days
+     * Info logs: 30 days
+     * Debug logs: 7 days
+   * Archive older logs to cold storage
+   * Implement tenant-specific log segregation
+
+## Distributed Tracing
+
+1. **Tracing Implementation**
+   * Use OpenTelemetry for instrumentation
+   * Implement context propagation across services
+   * Configure appropriate sampling rate (5-10% typical)
+   * Store traces in Jaeger or X-Ray
+
+2. **Span Generation**
+   * Create spans for:
+     * HTTP requests/responses
+     * Database queries
+     * External API calls
+     * Message processing
+     * Background jobs
+   * Add relevant attributes to spans:
+     * `tenant_id`
+     * `user_id`
+     * `resource_id` (e.g., order_id, product_id)
+     * Operation-specific details
+
+3. **Example Instrumentation**
+   ```typescript
+   import { trace } from '@opentelemetry/api';
+   import { registerInstrumentations } from '@opentelemetry/instrumentation';
+   import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
+   import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
+   import { PrismaInstrumentation } from '@prisma/instrumentation';
+   
+   // Register auto-instrumentations
+   registerInstrumentations({
+     instrumentations: [
+       new HttpInstrumentation(),
+       new ExpressInstrumentation(),
+       new PrismaInstrumentation(),
+     ],
+   });
+   
+   // Manual instrumentation example
+   async function processOrder(orderData, tenantId) {
+     const tracer = trace.getTracer('order-service');
+     const span = tracer.startSpan('process_order');
+     
+     // Set attributes
+     span.setAttribute('tenant_id', tenantId);
+     span.setAttribute('order_id', orderData.id);
+     span.setAttribute('amount', orderData.amount);
+     
+     try {
+       // Process payment
+       const paymentSpan = tracer.startSpan('process_payment', {
+         parent: span,
+       });
+       const paymentResult = await processPayment(orderData.payment);
+       paymentSpan.setAttribute('payment_id', paymentResult.id);
+       paymentSpan.end();
+       
+       // Update inventory
+       const inventorySpan = tracer.startSpan('update_inventory', {
+         parent: span,
+       });
+       await updateInventory(orderData.items);
+       inventorySpan.end();
+       
+       span.setStatus({ code: SpanStatusCode.OK });
+       return { success: true, orderId: orderData.id };
+     } catch (error) {
+       span.setStatus({
+         code: SpanStatusCode.ERROR,
+         message: error.message,
+       });
+       span.recordException(error);
+       throw error;
+     } finally {
+       span.end();
+     }
+   }
+   ```
+
+## Alerting Framework
+
+### Alert Definition
+
+1. **Alert Categories**
+   * **Availability**: Service uptime, endpoint health
+   * **Latency**: Response time degradation
+   * **Error Rate**: Elevated error percentage
+   * **Resource**: CPU, memory, disk utilization
+   * **Business**: Order failures, payment issues
+   * **Security**: Unusual access patterns, breach attempts
+
+2. **Alert Severity Levels**
+   * **Critical (P1)**: Immediate response required (24/7)
+   * **High (P2)**: Response required within 1 hour
+   * **Medium (P3)**: Response required within business day
+   * **Low (P4)**: Response during normal maintenance
+
+3. **Example Alert Rules**
+   ```yaml
+   groups:
+   - name: service_alerts
+     rules:
+     - alert: HighErrorRate
+       expr: sum(rate(http_requests_total{status=~"5.."}[5m])) by (service, tenant_id) / sum(rate(http_requests_total[5m])) by (service, tenant_id) > 0.05
+       for: 5m
+       labels:
+         severity: critical
+       annotations:
+         summary: "High error rate for {{ $labels.service }}"
+         description: "Error rate for {{ $labels.service }} (tenant: {{ $labels.tenant_id }}) is {{ $value | humanizePercentage }}"
+   
+     - alert: SlowResponseTime
+       expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (service, tenant_id, le)) > 2
+       for: 10m
+       labels:
+         severity: high
+       annotations:
+         summary: "Slow response time for {{ $labels.service }}"
+         description: "95th percentile response time for {{ $labels.service }} (tenant: {{ $labels.tenant_id }}) is {{ $value }} seconds"
+   
+     - alert: HighCpuUsage
+       expr: avg(container_cpu_usage_percentage) by (service, tenant_id) > 85
+       for: 15m
+       labels:
+         severity: medium
+       annotations:
+         summary: "High CPU usage for {{ $labels.service }}"
+         description: "CPU usage for {{ $labels.service }} (tenant: {{ $labels.tenant_id }}) is {{ $value | humanizePercentage }}"
+   ```
+
+### Alert Routing
+
+1. **Notification Channels**
+   * **Critical**: PagerDuty/OpsGenie + SMS + Slack
+   * **High**: PagerDuty/OpsGenie + Slack
+   * **Medium**: Email + Slack
+   * **Low**: Email
+
+2. **On-Call Rotation**
+   * Define primary and secondary on-call schedules
+   * Implement escalation policies
+   * Configure follow-the-sun for global coverage
+   * Track on-call burden and balance
+
+3. **Tenant Impact Assessment**
+   * Include affected tenant count in alerts
+   * Calculate business impact based on tenant tier
+   * Prioritize issues affecting multiple tenants
+   * Implement tenant-specific notifications for enterprise customers
+
+### Response Procedures
+
+1. **Alert Handling Process**
+   * Acknowledge alert
+   * Assess impact and scope
+   * Investigate root cause
+   * Apply mitigation
+   * Resolve and document
+   * Conduct post-mortem if necessary
+
+2. **Runbooks**
+   * Create service-specific runbooks
+   * Define common troubleshooting procedures
+   * Document escalation paths
+   * Update based on incident learnings
+
+3. **Example Runbook Structure**
+   ```markdown
+   # High Error Rate Runbook
+   
+   ## Initial Assessment
+   1. Check error logs for common patterns
+   2. Verify if error is tenant-specific or platform-wide
+   3. Check recent deployments or config changes
+   
+   ## Mitigation Steps
+   1. If deployment-related, consider rollback
+   2. If resource-related, scale affected service
+   3. If external dependency, implement circuit breaking
+   
+   ## Investigation
+   1. Analyze distributed traces for failing requests
+   2. Check database performance metrics
+   3. Examine relevant application metrics
+   
+   ## Escalation
+   - Database issues: DBA team (Slack: #dba-help)
+   - Infrastructure issues: Platform team (Slack: #platform-ops)
+   - Payment issues: Payment team (Slack: #payments-ops)
+   ```
+
+## Visualization & Dashboards
+
+1. **Dashboard Hierarchy**
+   * **Executive**: High-level platform health and business KPIs
+   * **Service**: Detailed metrics for each service
+   * **Infrastructure**: Resource utilization and capacity
+   * **Tenant**: Tenant-specific performance and usage
+   * **On-call**: Alert-focused for incident response
+
+2. **Grafana Implementation**
+   * Use consistent layout and color scheme
+   * Organize dashboards with folders
+   * Apply templating for environment/tenant selection
+   * Set appropriate time ranges and refresh intervals
+   * Example dashboard JSON:
+     ```json
+     {
+       "dashboard": {
+         "title": "Order Service Dashboard",
+         "uid": "order-service",
+         "templating": {
+           "list": [
+             {
+               "name": "tenant_id",
+               "type": "query",
+               "datasource": "Prometheus",
+               "query": "label_values(app_orders_total, tenant_id)",
+               "multi": false
+             }
+           ]
+         },
+         "panels": [
+           {
+             "title": "Orders Per Minute",
+             "type": "graph",
+             "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+             "targets": [
+               {
+                 "expr": "sum(rate(app_orders_total{tenant_id=\"$tenant_id\"}[5m])) by (status) * 60",
+                 "legendFormat": "{{status}}"
+               }
+             ]
+           },
+           {
+             "title": "Order Processing Time",
+             "type": "graph",
+             "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+             "targets": [
+               {
+                 "expr": "histogram_quantile(0.95, sum(rate(app_order_processing_duration_seconds_bucket{tenant_id=\"$tenant_id\"}[5m])) by (le))",
+                 "legendFormat": "p95"
+               },
+               {
+                 "expr": "histogram_quantile(0.50, sum(rate(app_order_processing_duration_seconds_bucket{tenant_id=\"$tenant_id\"}[5m])) by (le))",
+                 "legendFormat": "p50"
+               }
+             ]
+           }
+         ]
+       }
+     }
+     ```
+
+3. **Log Exploration**
+   * Configure Kibana or CloudWatch Logs Insights
+   * Create saved searches for common patterns
+   * Build log-based visualizations
+   * Link logs to related metrics and traces
+
+By implementing these monitoring, logging, and alerting practices, we ensure comprehensive visibility into our platform's health and performance while enabling rapid response to incidents.

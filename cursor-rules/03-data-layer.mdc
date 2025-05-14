@@ -1,0 +1,152 @@
+# Data Layer Notes
+
+## Tech Stack & Conventions
+
+- **Database:** PostgreSQL (v14+)
+
+  - Use a single database with **row-level multi-tenancy**: include a `tenantId` column on all tenant-scoped tables.
+  - Consider separate schemas per tenant for extra isolation if needed.
+
+- **ORM / Query Builder:** Prisma (recommended) or TypeORM
+
+  - Enable strict type-safety for queries.
+  - Use migrations (`prisma migrate` or TypeORM CLI) for schema versioning.
+
+- **Connection Pooling:** pgBouncer or built-in Prisma pooling
+
+  - Configure pool size according to service replicas.
+
+- **Caching Layer:** Redis
+
+  - Use for frequently read data (product catalog, configuration) and rate limiting.
+
+- **Search & Indexing (optional):** Elasticsearch or Algolia
+
+  - Sync products and orders for fast text search and analytics.
+
+## Security & Best Practices
+
+- **Encryption at Rest:** enable PostgreSQL encryption features or disk-level encryption.
+- **TLS for Connections:** enforce SSL for all DB connections.
+- **Least Privilege:** create separate DB roles for migrations vs runtime queries.
+- **Input Sanitization:** rely on ORM parameterization; avoid any string concatenation in raw queries.
+- **Backups & Recovery:** set up automated daily backups; test restore procedures quarterly.
+- **Monitoring & Alerts:** track slow queries, connection saturation, and replication lag via Prometheus.
+
+## Data Migration & Tenant Onboarding
+
+- **Onboarding Process:**
+  - Create database migration templates for new tenant initialization.
+  - Develop seed data generators for default catalog categories, tax rates, etc.
+  - Build ETL tools for importing external product catalogs (CSV, XML, JSON).
+- **Data Import Standards:**
+  - Define canonical data models for products, customers, and orders.
+  - Create validation pipeline to sanitize and normalize incoming data.
+  - Support incremental imports for large catalogs (>10K products).
+- **Migration Verification:**
+  - Generate data quality reports post-migration.
+  - Implement checksum verification between source and target.
+  - Provide rollback capability for failed migrations.
+
+## Performance Benchmarks
+
+- **Query Performance:**
+  - Product listing queries: < 100ms at p95 with 50 concurrent users.
+  - Cart operations: < 200ms at p95.
+  - Order submission: < 500ms at p95.
+- **Database Scaling:**
+  - Support 1M+ products across all tenants.
+  - Handle 10K+ concurrent sessions.
+  - Optimize for 100+ tenants on shared infrastructure.
+- **Caching Strategy:**
+  - Target >90% cache hit rate for product data.
+  - Implement cache invalidation on product updates.
+  - Use tiered caching (in-memory → Redis → database).
+
+## Inventory Management
+
+- **Tracking Strategy:**
+  - Real-time inventory synchronization across sales channels.
+  - Support for backorders and pre-orders with availability dates.
+  - Reserved stock tracking during checkout process.
+- **Multi-location Support:**
+  - Warehouse and store-level inventory tracking.
+  - Location-based fulfillment preferences.
+  - Transfer and rebalancing operations between locations.
+- **Notifications:**
+  - Low stock alerts based on configurable thresholds.
+  - Restock recommendations based on sales velocity.
+  - Auto-replenishment workflows for high-volume items.
+
+---
+
+# Roadmap / To-Do List
+
+1. **Initial Schema Definition**
+
+   - Define core entities: Tenant, User, Product, Category, Order, Payment, CartItem.
+   - Add `tenantId` foreign key to all relevant tables.
+
+2. **Migrations**
+
+   - Scaffold initial migration with Prisma `schema.prisma` or TypeORM entities.
+   - Apply to dev and staging; verify data integrity.
+
+3. **Seeding & Fixtures**
+
+   - Create seed scripts for default tenants and sample products.
+   - Use for testing and demos.
+
+4. **Connection Pool Configuration**
+
+   - Integrate pgBouncer or adjust Prisma pool settings.
+   - Document pool parameters (`max`, `idleTimeout`, etc.).
+
+5. **Caching Implementation**
+
+   - Set up Redis client in backend.
+   - Implement cache for GET `/products` and `/catalog` with TTL.
+
+6. **Search Integration**
+
+   - Integrate with Elasticsearch or Algolia.
+   - Create index mapping for Product and Order.
+   - Sync on create/update events via background job.
+
+7. **Backup & Restore Automation**
+
+   - Configure automated snapshots (AWS RDS or on-prem scripts).
+   - Test restore on dev instance.
+
+8. **Monitoring & Metrics**
+
+   - Expose DB metrics: query latency, connections, cache hit rate.
+   - Configure Grafana dashboards and alerts.
+
+9. **Replication & High Availability**
+
+   - Set up read-replicas for reporting.
+   - Plan failover strategy.
+
+10. **Data Retention & Archiving**
+
+    - Implement archival of old orders (>1 year) to a separate table or data warehouse.
+
+11. **Documentation**
+
+    - Document schema ER diagrams in `docs/ERD.md`.
+    - Update README with connection string examples and migration commands.
+
+12. **Tenant Data Import Tools**
+
+    - Build product catalog import service.
+    - Develop customer import utilities with PII encryption.
+    - Create order history migration tool.
+
+13. **Inventory Management System**
+
+    - Implement inventory tracking tables and APIs.
+    - Build multi-location inventory support.
+    - Create stock reservation system for checkout process.
+
+---

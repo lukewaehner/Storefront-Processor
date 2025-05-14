@@ -1,0 +1,101 @@
+---
+description: Accessibility standards and requirements for frontend development
+globs: "frontend/**/*"
+alwaysApply: false
+---
+
+# Accessibility Standards
+
+The e-commerce platform must be accessible to all users, including those with disabilities. We follow WCAG 2.1 AA standards as our baseline requirement.
+
+## Core Requirements
+
+1. **Semantic HTML**
+   * Use appropriate HTML elements (`<button>`, `<a>`, `<input>`, etc.)
+   * Use heading levels (`<h1>` through `<h6>`) in a logical hierarchy
+   * Use lists (`<ul>`, `<ol>`) for grouped content
+   * Use tables (`<table>`) with proper headers for tabular data
+   * Use native HTML elements before ARIA when possible
+
+2. **Keyboard Navigation**
+   * All interactive elements must be focusable and usable with keyboard
+   * Implement logical tab order (use `tabIndex="0"` sparingly, avoid positive values)
+   * Provide keyboard shortcuts for common actions
+   * Add visible focus indicators (don't remove outline without alternative)
+   * Ensure focus management for modals and dynamic content
+
+3. **Screen Readers**
+   * Provide alternative text for images (`alt` attributes)
+   * Use ARIA roles, states, and properties when necessary
+   * Implement proper form labels
+   * Announce dynamic content changes with `aria-live`
+   * Test with screen readers (NVDA, VoiceOver, JAWS)
+
+4. **Color and Contrast**
+   * Ensure sufficient color contrast (4.5:1 for normal text, 3:1 for large text)
+   * Don't rely on color alone to convey information
+   * Support high contrast mode
+   * Test with color blindness simulators
+
+5. **Forms and Validation**
+   * Associate labels with form controls
+   * Provide clear error messages
+   * Group related form elements with `<fieldset>` and `<legend>`
+   * Ensure form validation errors are announced to screen readers
+   * Support autocomplete where appropriate
+
+## Testing Requirements
+
+1. **Automated Testing**
+   * Integrate Axe or similar accessibility testing tool
+   * Include accessibility checks in CI/CD pipeline
+   * Fix all critical and serious issues
+
+2. **Manual Testing**
+   * Test keyboard navigation for all interactive elements
+   * Test with screen readers on major browsers
+   * Test with browser zoom up to 200%
+   * Test with browser text size increased
+   * Test color contrast and color blindness scenarios
+
+3. **Regular Audits**
+   * Conduct quarterly accessibility audits
+   * Document and prioritize issues
+   * Track improvements over time
+
+## Tenant Customization Guardrails
+
+* Prevent tenants from using inaccessible color combinations
+* Enforce minimum contrast ratios in the theming system
+* Provide accessible templates and components
+* Include accessibility guidance in tenant documentation
+
+## Common Components Requirements
+
+### Buttons and Links
+* Distinguish visually between buttons and links
+* Ensure actionable text is descriptive
+* Provide `aria-label` for icon-only buttons
+
+### Images and Media
+* Require alt text for all images
+* Provide captions and transcripts for video
+* Ensure media controls are keyboard accessible
+
+### Navigation
+* Implement proper landmark regions
+* Provide skip links
+* Make dropdown menus keyboard accessible
+
+### Modals and Overlays
+* Trap focus within modal when open
+* Return focus to trigger element when closed
+* Allow ESC key to close modal
+* Use `aria-modal="true"` and manage `aria-hidden`
+
+### Tables
+* Use proper table structure with `<th>` and scope
+* Provide captions or summaries for complex tables
+* Consider responsive alternatives for small screens
+
+By adhering to these standards, we ensure our platform is usable by the widest possible audience and comply with legal accessibility requirements.

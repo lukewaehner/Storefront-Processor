@@ -1,0 +1,126 @@
+# Integrations & Background Jobs Notes
+
+## Tech Stack & Conventions
+
+### External Integrations
+
+* **Payments (Stripe Connect)**
+
+  * Use Stripe SDK with Connect accounts (`stripeAccount` header).
+  * Abstract in a `PaymentProvider` interface for potential future adapters.
+  * Validate webhooks via signature (`stripe.webhooks.constructEvent`).
+* **Object Storage (AWS S3)**
+
+  * Use AWS SDK v3; upload assets with presigned URLs.
+  * Organize buckets by tenant (`bucket-{tenantId}`) or prefix (`{tenantId}/images`).
+  * Configure lifecycle rules: auto-expire temp files.
+* **Email (SendGrid / SES)**
+
+  * Wrap in an `EmailService` with methods: `sendVerification`, `sendOrderReceipt`, `sendReport`.
+  * Templates stored in a templating engine (e.g. Handlebars) and loaded from S3 or local.
+* **SMS (Twilio)**
+
+  * Abstract `SmsService`; handle country codes, opt-ins, and error retries.
+* **Search (Elasticsearch / Algolia)**
+
+  * Use official clients; maintain index mappings in code.
+  * Sync on entity events (create/update/delete).
+
+### Background Job Processing
+
+* **Message Broker:** Redis-backed **BullMQ** (or RabbitMQ)
+
+  * Central queue for delayed and repeatable jobs.
+  * Configure concurrency and rate limiting per queue.
+* **Job Types**
+
+  * **Email Jobs:** send transactional emails.
+  * **Report Generation:** periodic analytics exports (CSV, PDF).
+  * **Inventory Sync:** synchronize stock levels between services.
+  * **Search Indexing:** enqueue indexing tasks for ES/Algolia.
+  * **Cart Cleanup:** expire abandoned carts after TTL.
+
+## Security & Best Practices
+
+* **Webhook Security:**
+
+  * Verify payload signatures and timestamps.
+  * Implement idempotency keys to avoid duplicate processing.
+* **Credential Management:**
+
+  * Store API keys and secrets in Vault or AWS Secrets Manager.
+  * Rotate credentials periodically.
+* **Error Handling & Retries:**
+
+  * Configure retry policies with exponential backoff.
+  * Use dead-letter queues for failed jobs.
+* **Data Consistency:**
+
+  * Wrap multi-step jobs in transactions when possible.
+  * Use saga patterns or outbox tables for eventual consistency.
+* **Monitoring & Alerts:**
+
+  * Track job queue lengths, failure rates, and processing times.
+  * Alert on sudden spikes in failures or backlog.
+
+---
+
+# Roadmap / To-Do List
+
+1. **Stripe Connect Onboarding**
+
+   * Endpoint: `/payments/connect/onboard` → create account + accountLink.
+   * Persist connected account IDs per tenant.
+
+2. **PaymentIntent & Webhooks**
+
+   * Implement `/payments/create-intent` with `application_fee_amount`.
+   * Webhook controller: handle `payment_intent.succeeded`, `charge.refunded`.
+
+3. **S3 Asset Storage**
+
+   * Initialize AWS SDK; configure bucket naming.
+   * Create presigned URL endpoint for uploads.
+
+4. **Email Integration**
+
+   * Configure SendGrid/SES client.
+   * Write templates & integrate with `EmailService`.
+   * Enqueue `EmailJob` on signup, order creation.
+
+5. **SMS Integration**
+
+   * Wrap Twilio in `SmsService`.
+   * Send SMS notifications for key events (e.g., order shipped).
+
+6. **Search Index Sync**
+
+   * Build indexer job: on product update, enqueue indexing.
+   * Validate search queries via GraphQL/REST.
+
+7. **Job Queue Infrastructure**
+
+   * Stand up Redis instance; configure BullMQ.
+   * Define queues and job processors in code.
+
+8. **Job Definitions & Handlers**
+
+   * **EmailJob**, **ReportJob**, **InventorySyncJob**, **CartCleanupJob**.
+   * Test job handlers locally and in staging.
+
+9. **Dead-Letter & Retries**
+
+   * Configure DLQ for critical queues.
+   * Define retry/backoff strategy for each job type.
+
+10. **Monitoring & Dashboards**
+
+    * Integrate queue metrics into Prometheus/Grafana.
+    * Set alerts on failure thresholds (>5% failure rate).
+
+11. **Documentation**
+
+    * Add `docs/Integrations.md` with setup steps for each external service.
+    * Document job queue architecture in `docs/Jobs.md`.
+
+---

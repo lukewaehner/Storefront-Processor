@@ -1,0 +1,82 @@
+# Monitoring, Logging & Alerting Notes
+
+## General Conventions
+
+### Metrics
+- **Prometheus** for time-series ingestion  
+- **Instrumentation**: use Prometheus client (Node.js) to export custom metrics  
+- **Naming**: `app_<service>_<metric>_{total|seconds|count}`  
+- **Labels**: `tenant_id`, `env`, `region`  
+- **Dashboards**: Grafana — one dashboard per service, with panels for:  
+  - Request rate & latency  
+  - Error rate  
+  - Queue/backlog depth  
+  - Host/container resource usage
+
+### Tracing
+- **Jaeger** (self-hosted) or **AWS X-Ray**  
+- **Scope**: instrument key RPC/DB calls, external API requests  
+- **Span Context**: propagate trace IDs via headers in HTTP/gRPC  
+- **Sampling**: 100% in dev; 5–10% in prod (adjust as needed)
+
+### Logs
+- **Structured JSON** output from all services  
+- **Log Levels**:  
+  - `DEBUG` for dev only  
+  - `INFO` for business events  
+  - `WARN` for recoverable issues  
+  - `ERROR` for exceptions & failures  
+- **Shipping**: Filebeat → Elasticsearch (or Datadog Agent → Datadog Logs)  
+- **Retention**: 30–90 days, rollover nightly
+
+### Error Tracking
+- **Sentry** for runtime JS/TS exceptions and uncaught errors  
+- **Scope**: frontend React errors + backend uncaught exceptions  
+- **Alerts**: notify Slack/SMS on new/fatal issues
+
+### Uptime & Alerting
+- **Health Checks**:  
+  - HTTP `/health` endpoint returning 200 + service status  
+  - Kubernetes readiness & liveness probes  
+- **Uptime Monitoring**: PagerDuty or Opsgenie integrated with UptimeRobot/StatusCake  
+- **Alerting Rules** (Prometheus Alertmanager or Datadog):  
+  - High error rate (>1% for 5m)  
+  - Latency p95 > target  
+  - Pod restart spikes  
+  - Disk/CPU usage > 80%
+
+---
+
+## Roadmap / To-Do
+
+1. **Metrics Instrumentation**  
+   - [ ] Add Prometheus client to each service  
+   - [ ] Define and export key business & system metrics  
+   - [ ] Deploy Prometheus & Grafana; configure scrape jobs  
+   - [ ] Build initial Grafana dashboards
+
+2. **Distributed Tracing**  
+   - [ ] Integrate Jaeger SDK in services  
+   - [ ] Instrument HTTP clients, DB drivers, and queue consumers  
+   - [ ] Deploy Jaeger backend; verify end-to-end traces
+
+3. **Log Collection**  
+   - [ ] Standardize JSON logger across codebase  
+   - [ ] Configure Filebeat/Datadog Agent on hosts  
+   - [ ] Set up Elasticsearch (or Datadog Logs) indices & ILM policies
+
+4. **Error Tracking Setup**  
+   - [ ] Initialize Sentry projects (frontend/backend)  
+   - [ ] Hook into global error handlers  
+   - [ ] Configure alert rules for new/fatal errors
+
+5. **Health & Uptime Monitoring**  
+   - [ ] Implement `/health` endpoints in all services  
+   - [ ] Configure Kubernetes probes  
+   - [ ] Integrate with PagerDuty/Opsgenie for alert routing  
+   - [ ] Set up UptimeRobot checks
+
+6. **Alerting Rules & Playbooks**  
+   - [ ] Define Prometheus Alertmanager rules  
+   - [ ] Document runbooks for common alerts  
+   - [ ] Test alert flows end to end

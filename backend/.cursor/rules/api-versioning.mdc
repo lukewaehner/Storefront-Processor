@@ -1,0 +1,146 @@
+---
+description: API versioning and platform evolution strategy
+globs: "backend/**/*"
+alwaysApply: false
+---
+
+# API Versioning & Platform Evolution
+
+This document outlines our approach to API versioning, breaking changes, and platform evolution to ensure stability for tenants while enabling continuous improvement.
+
+## API Versioning Strategy
+
+### Version Format
+
+1. **URI Path Versioning**
+   * Format: `/api/v{major}/resource`
+   * Example: `/api/v1/products`, `/api/v2/products`
+   * GraphQL: Single endpoint with version in schema types
+
+2. **Semantic Versioning**
+   * **Major** (v1 → v2): Breaking changes
+   * **Minor** (v1.1 → v1.2): Non-breaking additions
+   * **Patch** (v1.1.1 → v1.1.2): Bug fixes only
+
+3. **Version Headers**
+   * Include version in response headers:
+     * `API-Version: 1.2.3`
+     * `API-Deprecated: true` (if applicable)
+     * `API-Sunset-Date: 2025-12-31` (if deprecated)
+
+### Version Lifecycle
+
+1. **Active**
+   * Current recommended version
+   * Receives feature additions and bug fixes
+   * Documentation prominently featured
+
+2. **Maintained**
+   * Previous stable version
+   * Receives security updates and critical bug fixes
+   * Documentation available but not highlighted
+
+3. **Deprecated**
+   * Scheduled for removal
+   * Security fixes only
+   * Clear warnings and migration guides
+   * Minimum 6-month deprecation period before sunset
+
+4. **Sunset**
+   * No longer available
+   * Returns 410 Gone with information about current version
+   * Redirects to documentation
+
+## Breaking vs. Non-Breaking Changes
+
+### Breaking Changes (Requires Major Version Increment)
+
+* Removing a field, endpoint, or parameter
+* Changing a field type or validation rules
+* Adding a required parameter
+* Changing error response format
+* Significant changes to authentication flow
+* Changing the URL structure
+
+### Non-Breaking Changes (Minor Version Increment)
+
+* Adding new optional fields
+* Adding new endpoints
+* Extending enumerations with new values
+* Adding optional query parameters
+* Performance improvements
+* Bug fixes that maintain behavior
+
+## Implementation Guidelines
+
+1. **Code Organization**
+   * Separate controllers by version
+   * Share services between versions where possible
+   * Use inheritance for extending functionality
+   * Implement version-specific DTOs and entities
+
+2. **Request Routing**
+   * Implement version middleware to parse version
+   * Route to appropriate controller based on version
+   * Return clear errors for unsupported versions
+
+3. **Documentation**
+   * Maintain separate documentation per major version
+   * Clearly mark deprecated features
+   * Provide migration guides between versions
+   * Include version compatibility matrix
+
+## Feature Evolution with Feature Flags
+
+1. **Flag Types**
+   * **Release Flags**: Control visibility of new features
+   * **Experiment Flags**: A/B test new functionality
+   * **Ops Flags**: Emergency killswitches
+   * **Permission Flags**: Tenant-specific feature access
+
+2. **Implementation**
+   * Store flags in database with tenant scope
+   * Cache flag values for performance
+   * Implement fallback behavior when features are disabled
+   * Log feature flag decisions for debugging
+
+3. **Lifecycle**
+   * Temporary flags for features in development
+   * Transition to permanent flags for tenant-tier features
+   * Clean up flags after feature is fully adopted
+
+## Deprecation Process
+
+1. **Communication**
+   * Announce deprecation at least 6 months in advance
+   * Send notifications to affected tenants
+   * Include deprecation notices in documentation
+   * Provide upgrade guides and migration tools
+
+2. **Monitoring**
+   * Track usage of deprecated endpoints
+   * Identify tenants still using old versions
+   * Provide usage reports to tenant admins
+   * Send reminders as sunset date approaches
+
+3. **Transition Support**
+   * Offer migration assistance for enterprise tenants
+   * Provide tools to identify breaking changes
+   * Consider extension support for critical tenants
+   * Document workarounds for removed functionality
+
+## Tenant Upgrade Path
+
+1. **Self-Service Upgrades**
+   * Enable minor version upgrades via tenant dashboard
+   * Provide testing environment for upgrade validation
+   * Allow scheduled upgrades during off-hours
+   * Support rollback in case of issues
+
+2. **Managed Upgrades**
+   * Coordinate major version upgrades with tenant
+   * Provide migration support and testing
+   * Schedule upgrades in phases
+   * Monitor closely during transition period
+
+By following these guidelines, we maintain a balance between platform evolution and stability for our tenants.

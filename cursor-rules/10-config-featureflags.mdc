@@ -1,0 +1,45 @@
+# Configuration & Feature Flags Notes
+
+## General Conventions
+
+### Configuration Management
+- **Local**: `.env` files (checked into git for examples only)  
+- **Staging/Prod**: AWS Parameter Store or AWS Secrets Manager  
+- **Structure**:  
+  - `APP_` for service flags (e.g. `APP_PORT`, `APP_LOG_LEVEL`)  
+  - `DB_` for database creds/URIs  
+  - `PAYMENT_` for provider keys  
+- **Access**: mount as environment vars in containers via Terraform/EKS
+
+### Feature Flags
+- **Provider**: LaunchDarkly or Unleash  
+- **Usage**: wrap new features in flag checks (`if (flagService.isEnabled('new-checkout')) {...}`)  
+- **Environments**: separate flag sets for dev, staging, prod  
+- **Auditing**: tag flags with owner, creation date, planned removal
+
+### Environment Management
+- **Naming**: `dev`, `staging`, `prod`  
+- **Isolation**: separate AWS accounts/projects per environment  
+- **Promotion**:  
+  - Merge to `main` → deploy to staging with staging config  
+  - Manual approval → deploy to prod with prod config
+
+---
+
+## Roadmap / To-Do
+
+1. **Config Store Setup**  
+   - [ ] Define all required env vars in `.env.example`  
+   - [ ] Provision AWS Parameter Store paths (`/app/dev/…`, `/app/prod/…`) with Terraform  
+   - [ ] Integrate Parameter Store fetch in startup code
+
+2. **Feature Flag Integration**  
+   - [ ] Evaluate LaunchDarkly vs. Unleash (pricing, SDK maturity)  
+   - [ ] Add SDK init to each service  
+   - [ ] Wrap at least one non-critical feature behind a flag  
+   - [ ] Build internal dashboard for flag management
+
+3. **Environment Promotion Workflow**  
+   - [ ] Document branch and deploy strategy in `docs/DEPLOYMENT.md`  
+   - [ ] Automate injecting correct config in GitHub Actions workflows  
+   - [ ] Test config rotation and rollback procedures

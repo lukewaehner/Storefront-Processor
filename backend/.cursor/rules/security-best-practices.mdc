@@ -1,0 +1,158 @@
+---
+description: Security best practices for backend implementation
+globs: "backend/**/*"
+alwaysApply: true
+---
+
+# Security Best Practices
+
+Security is a critical aspect of our e-commerce platform. This document outlines the security practices that must be followed across all backend implementations.
+
+## Authentication & Authorization
+
+1. **JWT Implementation**
+   * Use asymmetric keys (RS256) for signing
+   * Short expiration times (<15 minutes)
+   * Store tokens in HttpOnly, Secure cookies
+   * Implement refresh token rotation
+   * Validate all claims (iss, aud, exp, nbf)
+
+2. **Authorization Framework**
+   * Implement role-based access control (RBAC)
+   * Create permission-based guards (`@RequirePermission()`)
+   * Default to deny for unspecified permissions
+   * Include tenant context in authorization decisions
+   * Audit all permission changes
+
+3. **Identity Management**
+   * Strong password requirements
+   * Implement account lockout after failed attempts
+   * Support multi-factor authentication
+   * Secure password reset flows
+   * Expire inactive sessions
+
+## Data Protection
+
+1. **Sensitive Data Handling**
+   * Encrypt PII at rest
+   * Hash passwords with strong algorithms (bcrypt/argon2)
+   * Redact sensitive data in logs
+   * Implement field-level encryption for critical data
+   * Validate data classification and handling
+
+2. **Database Security**
+   * Use parameterized queries always
+   * Implement least privilege database roles
+   * Enable TLS for database connections
+   * Regularly audit database access
+   * Use connection pooling with proper timeouts
+
+3. **Data Validation**
+   * Validate all input at API boundaries
+   * Use schema validation (class-validator)
+   * Implement content type checking
+   * Sanitize data before storage or display
+   * Validate file uploads (type, size, content)
+
+## Infrastructure Security
+
+1. **Network Security**
+   * Implement proper CORS policy
+   * Use TLS 1.2+ for all connections
+   * Configure security headers (Helmet)
+   * Segment network by function
+   * Implement Web Application Firewall (WAF)
+
+2. **API Protection**
+   * Rate limiting to prevent abuse
+   * Implement API key validation for machine-to-machine
+   * Use CSRF tokens for browser clients
+   * Monitor for unusual traffic patterns
+   * Validate request size and content
+
+3. **Dependency Management**
+   * Regular security audits
+   * Pin dependency versions
+   * Monitor for vulnerable dependencies
+   * Update dependencies promptly
+   * Validate all third-party code
+
+## Secure Coding Practices
+
+1. **Code Review Requirements**
+   * Security-focused code reviews
+   * Static analysis in CI pipeline
+   * Regular security training for developers
+   * Maintain security checklist for PRs
+   * Document security decisions
+
+2. **Error Handling**
+   * Never expose stack traces to clients
+   * Implement custom error messages
+   * Log detailed errors for internal use
+   * Return appropriate status codes
+   * Implement graceful degradation
+
+3. **Secrets Management**
+   * Never commit secrets to source control
+   * Use environment variables or secrets manager
+   * Rotate credentials regularly
+   * Implement secrets encryption
+   * Audit secret access
+
+## Security Testing
+
+1. **Automated Security Testing**
+   * SAST (Static Application Security Testing)
+   * DAST (Dynamic Application Security Testing)
+   * Dependency scanning
+   * Container scanning
+   * Infrastructure as Code scanning
+
+2. **Penetration Testing**
+   * Regular penetration testing
+   * Implement security regression tests
+   * Bug bounty program
+   * Red team exercises
+   * Vulnerability disclosure policy
+
+## Incident Response
+
+1. **Detection & Monitoring**
+   * Implement security logging
+   * Set up alerts for suspicious activity
+   * Monitor for unauthorized access
+   * Track login anomalies
+   * Use intrusion detection systems
+
+2. **Response Procedures**
+   * Documented incident response plan
+   * Clear roles and responsibilities
+   * Communication templates
+   * Evidence collection procedures
+   * Post-incident analysis process
+
+## Compliance Requirements
+
+1. **PCI DSS Compliance**
+   * Never store complete card numbers
+   * Implement cardholder data environment
+   * Regular compliance assessments
+   * Maintain audit trails
+   * Security awareness training
+
+2. **GDPR & Privacy**
+   * Implement data minimization
+   * Provide data access and deletion mechanism
+   * Document data processing activities
+   * Implement consent management
+   * Data breach notification procedure
+
+3. **Audit Logging**
+   * Log all security-relevant events
+   * Include who, what, when, where
+   * Protect log integrity
+   * Centralize log collection
+   * Implement log retention policy
+
+By adhering to these security best practices, we ensure the protection of our platform, tenant data, and end-user information.

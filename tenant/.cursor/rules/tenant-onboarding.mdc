@@ -1,0 +1,1509 @@
+---
+description: Tenant onboarding process and workflow
+globs: "tenant/**/*"
+alwaysApply: false
+---
+
+# Tenant Onboarding Process
+
+This document outlines the implementation details for tenant onboarding workflow, guiding new tenants through the setup process to ensure successful adoption of the platform.
+
+## Onboarding Flow Architecture
+
+### Onboarding Stages
+
+1. **Stage Model**
+   * Schema definition:
+     ```prisma
+     model TenantOnboarding {
+       id                String              @id @default(uuid())
+       tenantId          String              @unique
+       tenant            Tenant              @relation(fields: [tenantId], references: [id])
+       currentStage      OnboardingStage     @default(ACCOUNT_SETUP)
+       stageProgress     Json                // Structured progress for each stage
+       completedStages   OnboardingStage[]
+       startedAt         DateTime            @default(now())
+       completedAt       DateTime?
+       lastActivityAt    DateTime            @default(now())
+     }
+     
+     enum OnboardingStage {
+       ACCOUNT_SETUP
+       BRAND_SETUP
+       PAYMENT_SETUP
+       PRODUCT_SETUP
+       SHIPPING_SETUP
+       LAUNCH_CHECKLIST
+     }
+     ```
+
+2. **Stage Configuration**
+   * Define requirements for each stage
+   * Track completion status of individual steps
+   * Example configuration:
+     ```typescript
+     interface OnboardingStepConfig {
+       id: string;
+       title: string;
+       description: string;
+       required: boolean;
+       action: {
+         type: 'REDIRECT' | 'COMPONENT' | 'API_CALL';
+         target: string;
+       };
+     }
+     
+     interface OnboardingStageConfig {
+       id: OnboardingStage;
+       title: string;
+       description: string;
+       steps: OnboardingStepConfig[];
+     }
+     
+     const onboardingConfig: OnboardingStageConfig[] = [
+       {
+         id: 'ACCOUNT_SETUP',
+         title: 'Account Setup',
+         description: 'Complete your account details',
+         steps: [
+           {
+             id: 'company_details',
+             title: 'Company Information',
+             description: 'Add your company name, address and contact details',
+             required: true,
+             action: {
+               type: 'REDIRECT',
+               target: '/onboarding/account/company',
+             },
+           },
+           {
+             id: 'admin_user',
+             title: 'Create Admin User',
+             description: 'Set up additional admin users for your team',
+             required: false,
+             action: {
+               type: 'REDIRECT',
+               target: '/onboarding/account/users',
+             },
+           },
+         ],
+       },
+       {
+         id: 'BRAND_SETUP',
+         title: 'Brand Setup',
+         description: 'Customize your store appearance',
+         steps: [
+           {
+             id: 'logo_upload',
+             title: 'Upload Logo',
+             description: 'Add your company logo',
+             required: true,
+             action: {
+               type: 'COMPONENT',
+               target: 'LogoUploader',
+             },
+           },
+           {
+             id: 'color_scheme',
+             title: 'Color Scheme',
+             description: 'Set your brand colors',
+             required: true,
+             action: {
+               type: 'COMPONENT',
+               target: 'ColorPicker',
+             },
+           },
+           {
+             id: 'store_theme',
+             title: 'Store Theme',
+             description: 'Select a theme for your storefront',
+             required: true,
+             action: {
+               type: 'REDIRECT',
+               target: '/onboarding/brand/theme',
+             },
+           },
+         ],
+       },
+       // Additional stages...
+     ];
+     ```
+
+3. **Progress Tracking**
+   * Monitor step completion
+   * Calculate overall progress
+   * Example implementation:
+     ```typescript
+     class OnboardingService {
+       constructor(
+         private readonly prisma: PrismaClient,
+         private readonly configService: ConfigService,
+       ) {}
+       
+       async getOnboardingStatus(tenantId: string): Promise<OnboardingStatus> {
+         // Get tenant onboarding record
+         const onboarding = await this.prisma.tenantOnboarding.findUnique({
+           where: { tenantId },
+         });
+         
+         if (!onboarding) {
+           throw new NotFoundException('Onboarding not found');
+         }
+         
+         // Get config for all stages
+         const stageConfigs = this.configService.get<OnboardingStageConfig[]>('onboarding.stages');
+         
+         // Calculate progress for each stage
+         const stages = stageConfigs.map(stageConfig => {
+           const stageProgress = onboarding.stageProgress[stageConfig.id] || {};
+           
+           // Calculate completed steps
+           const completedSteps = stageConfig.steps
+             .filter(step => stageProgress[step.id]?.completed)
+             .map(step => step.id);
+             
+           // Calculate required completed steps
+           const requiredSteps = stageConfig.steps
+             .filter(step => step.required)
+             .map(step => step.id);
+             
+           const requiredCompletedSteps = requiredSteps
+             .filter(stepId => completedSteps.includes(stepId));
+             
+           // Calculate completion
+           const isCompleted = onboarding.completedStages.includes(stageConfig.id);
+           const canComplete = requiredCompletedSteps.length === requiredSteps.length;
+           
+           return {
+             id: stageConfig.id,
+             title: stageConfig.title,
+             description: stageConfig.description,
+             completedSteps,
+             requiredSteps,
+             isCompleted,
+             canComplete,
+             progress: requiredSteps.length > 0
+               ? (requiredCompletedSteps.length / requiredSteps.length) * 100
+               : completedSteps.length > 0
+                 ? 100
+                 : 0,
+           };
+         });
+         
+         // Calculate overall progress
+         const totalRequiredSteps = stages.reduce(
+           (total, stage) => total + stage.requiredSteps.length, 
+           0
+         );
+         
+         const totalCompletedRequiredSteps = stages.reduce(
+           (total, stage) => total + (
+             stage.requiredSteps.filter(
+               stepId => stage.completedSteps.includes(stepId)
+             ).length
+           ),
+           0
+         );
+         
+         const overallProgress = totalRequiredSteps > 0
+           ? (totalCompletedRequiredSteps / totalRequiredSteps) * 100
+           : 0;
+           
+         return {
+           currentStage: onboarding.currentStage,
+           stages,
+           overallProgress,
+           isCompleted: !!onboarding.completedAt,
+         };
+       }
+       
+       async completeStep(
+         tenantId: string, 
+         stageId: OnboardingStage, 
+         stepId: string
+       ): Promise<void> {
+         // Validate step exists
+         const stageConfig = this.configService
+           .get<OnboardingStageConfig[]>('onboarding.stages')
+           .find(stage => stage.id === stageId);
+           
+         if (!stageConfig) {
+           throw new BadRequestException(`Invalid stage: ${stageId}`);
+         }
+         
+         const stepConfig = stageConfig.steps.find(step => step.id === stepId);
+         
+         if (!stepConfig) {
+           throw new BadRequestException(`Invalid step: ${stepId}`);
+         }
+         
+         // Get current progress
+         const onboarding = await this.prisma.tenantOnboarding.findUnique({
+           where: { tenantId },
+         });
+         
+         if (!onboarding) {
+           throw new NotFoundException('Onboarding not found');
+         }
+         
+         // Update progress
+         const stageProgress = onboarding.stageProgress[stageId] || {};
+         stageProgress[stepId] = {
+           completed: true,
+           completedAt: new Date(),
+         };
+         
+         // Save progress
+         await this.prisma.tenantOnboarding.update({
+           where: { tenantId },
+           data: {
+             stageProgress: {
+               ...onboarding.stageProgress,
+               [stageId]: stageProgress,
+             },
+             lastActivityAt: new Date(),
+           },
+         });
+         
+         // Check if stage can be completed
+         await this.checkStageCompletion(tenantId, stageId);
+       }
+     }
+     ```
+
+### Guided Wizards
+
+1. **UI Components**
+   * Progressive step wizards
+   * Clear completion indicators
+   * Skip/continue controls
+   * Example React component structure:
+     ```tsx
+     interface OnboardingWizardProps {
+       stageId: OnboardingStage;
+       onComplete: () => void;
+     }
+     
+     const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ 
+       stageId, 
+       onComplete 
+     }) => {
+       const [currentStepIndex, setCurrentStepIndex] = useState(0);
+       const [stageData, setStageData] = useState<any>({});
+       const { data: stageConfig } = useQuery(['onboardingConfig', stageId], 
+         () => api.getStageConfig(stageId)
+       );
+       
+       const steps = stageConfig?.steps || [];
+       const currentStep = steps[currentStepIndex];
+       
+       const handleStepComplete = (stepId: string, data: any) => {
+         // Save step data
+         setStageData(prev => ({
+           ...prev,
+           [stepId]: data,
+         }));
+         
+         // Mark step as complete in backend
+         api.completeOnboardingStep(stageId, stepId)
+           .then(() => {
+             // Move to next step or complete
+             if (currentStepIndex < steps.length - 1) {
+               setCurrentStepIndex(currentStepIndex + 1);
+             } else {
+               onComplete();
+             }
+           });
+       };
+       
+       const handleSkip = () => {
+         if (currentStep.required) {
+           return; // Can't skip required steps
+         }
+         
+         if (currentStepIndex < steps.length - 1) {
+           setCurrentStepIndex(currentStepIndex + 1);
+         } else {
+           onComplete();
+         }
+       };
+       
+       if (!currentStep) {
+         return <div>Loading...</div>;
+       }
+       
+       // Render appropriate component based on step action type
+       const renderStepComponent = () => {
+         switch (currentStep.action.type) {
+           case 'COMPONENT':
+             const StepComponent = onboardingComponents[currentStep.action.target];
+             return (
+               <StepComponent
+                 onComplete={(data) => handleStepComplete(currentStep.id, data)}
+                 initialData={stageData[currentStep.id]}
+               />
+             );
+             
+           case 'REDIRECT':
+             return (
+               <RedirectStep
+                 target={currentStep.action.target}
+                 onReturn={(data) => handleStepComplete(currentStep.id, data)}
+               />
+             );
+             
+           default:
+             return <div>Unknown step type</div>;
+         }
+       };
+       
+       return (
+         <div className="onboarding-wizard">
+           <div className="wizard-header">
+             <h2>{stageConfig?.title}</h2>
+             <p>{stageConfig?.description}</p>
+           </div>
+           
+           <div className="wizard-progress">
+             {steps.map((step, index) => (
+               <div 
+                 key={step.id}
+                 className={`progress-step ${index === currentStepIndex ? 'active' : ''} ${index < currentStepIndex ? 'completed' : ''}`}
+               >
+                 {step.title}
+               </div>
+             ))}
+           </div>
+           
+           <div className="wizard-content">
+             <div className="step-header">
+               <h3>{currentStep.title}</h3>
+               <p>{currentStep.description}</p>
+             </div>
+             
+             {renderStepComponent()}
+           </div>
+           
+           <div className="wizard-footer">
+             {!currentStep.required && (
+               <button onClick={handleSkip}>
+                 Skip this step
+               </button>
+             )}
+           </div>
+         </div>
+       );
+     };
+     ```
+
+2. **Context-Aware Assistance**
+   * Provide contextual help for each step
+   * Show tooltips and guidance
+   * Link to relevant documentation
+   * Example tooltip component:
+     ```tsx
+     interface HelpTooltipProps {
+       topic: string;
+       placement?: 'top' | 'bottom' | 'left' | 'right';
+     }
+     
+     const HelpTooltip: React.FC<HelpTooltipProps> = ({ 
+       topic, 
+       placement = 'right' 
+     }) => {
+       const { data: helpContent } = useQuery(['helpContent', topic], 
+         () => api.getHelpContent(topic)
+       );
+       
+       return (
+         <Tooltip 
+           title={
+             <div className="help-tooltip">
+               <div className="help-tooltip-content" 
+                 dangerouslySetInnerHTML={{ __html: helpContent?.content || '' }} 
+               />
+               {helpContent?.docUrl && (
+                 <a href={helpContent.docUrl} target="_blank" rel="noopener noreferrer">
+                   Learn more
+                 </a>
+               )}
+             </div>
+           }
+           placement={placement}
+         >
+           <IconButton>
+             <HelpIcon />
+           </IconButton>
+         </Tooltip>
+       );
+     };
+     ```
+
+3. **Persistent State**
+   * Save progress automatically
+   * Resume from last position
+   * Implement draft state storage
+   * Example state management:
+     ```typescript
+     class OnboardingStateService {
+       async saveDraftState(
+         tenantId: string, 
+         stageId: OnboardingStage, 
+         stepId: string, 
+         state: any
+       ): Promise<void> {
+         const cacheKey = `onboarding:${tenantId}:${stageId}:${stepId}`;
+         
+         // Store draft state in Redis with TTL
+         await this.redisService.set(
+           cacheKey,
+           JSON.stringify(state),
+           'EX',
+           60 * 60 * 24 * 7 // 1 week
+         );
+       }
+       
+       async getDraftState(
+         tenantId: string, 
+         stageId: OnboardingStage, 
+         stepId: string
+       ): Promise<any> {
+         const cacheKey = `onboarding:${tenantId}:${stageId}:${stepId}`;
+         
+         const state = await this.redisService.get(cacheKey);
+         
+         if (!state) {
+           return null;
+         }
+         
+         return JSON.parse(state);
+       }
+       
+       async clearDraftState(
+         tenantId: string, 
+         stageId: OnboardingStage, 
+         stepId: string
+       ): Promise<void> {
+         const cacheKey = `onboarding:${tenantId}:${stageId}:${stepId}`;
+         await this.redisService.del(cacheKey);
+       }
+     }
+     ```
+
+## Domain-Specific Onboarding
+
+### Account & Profile Setup
+
+1. **Business Information**
+   * Company details collection
+   * Contact information
+   * Tax identification
+   * Address validation
+   * Example business form:
+     ```tsx
+     interface BusinessFormData {
+       companyName: string;
+       legalName: string;
+       taxId: string;
+       phoneNumber: string;
+       email: string;
+       address: {
+         line1: string;
+         line2?: string;
+         city: string;
+         state: string;
+         postalCode: string;
+         country: string;
+       };
+     }
+     
+     const BusinessInfoForm: React.FC<OnboardingStepProps<BusinessFormData>> = ({
+       onComplete,
+       initialData,
+     }) => {
+       const [formData, setFormData] = useState<BusinessFormData>(initialData || {
+         companyName: '',
+         legalName: '',
+         taxId: '',
+         phoneNumber: '',
+         email: '',
+         address: {
+           line1: '',
+           city: '',
+           state: '',
+           postalCode: '',
+           country: '',
+         },
+       });
+       
+       const [errors, setErrors] = useState<Record<string, string>>({});
+       
+       const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+         const { name, value } = event.target;
+         
+         if (name.startsWith('address.')) {
+           const addressField = name.split('.')[1];
+           setFormData(prev => ({
+             ...prev,
+             address: {
+               ...prev.address,
+               [addressField]: value,
+             },
+           }));
+         } else {
+           setFormData(prev => ({
+             ...prev,
+             [name]: value,
+           }));
+         }
+       };
+       
+       const validateForm = (): boolean => {
+         const newErrors: Record<string, string> = {};
+         
+         if (!formData.companyName) {
+           newErrors.companyName = 'Company name is required';
+         }
+         
+         if (!formData.legalName) {
+           newErrors.legalName = 'Legal name is required';
+         }
+         
+         if (!formData.email) {
+           newErrors.email = 'Email is required';
+         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+           newErrors.email = 'Invalid email format';
+         }
+         
+         // More validations...
+         
+         setErrors(newErrors);
+         return Object.keys(newErrors).length === 0;
+       };
+       
+       const handleSubmit = async (event: React.FormEvent) => {
+         event.preventDefault();
+         
+         if (!validateForm()) {
+           return;
+         }
+         
+         try {
+           // Save company information
+           await api.updateTenantBusinessInfo(formData);
+           
+           // Complete onboarding step
+           onComplete(formData);
+         } catch (error) {
+           console.error('Failed to save business information', error);
+         }
+       };
+       
+       return (
+         <form onSubmit={handleSubmit}>
+           <div className="form-group">
+             <label htmlFor="companyName">Company Name *</label>
+             <input
+               type="text"
+               id="companyName"
+               name="companyName"
+               value={formData.companyName}
+               onChange={handleChange}
+               className={errors.companyName ? 'invalid' : ''}
+             />
+             {errors.companyName && (
+               <div className="error-message">{errors.companyName}</div>
+             )}
+           </div>
+           
+           {/* More fields... */}
+           
+           <button type="submit" className="primary-button">
+             Save and Continue
+           </button>
+         </form>
+       );
+     };
+     ```
+
+2. **User Management**
+   * Setup additional admin users
+   * Role assignment
+   * Invitation system
+   * Example user invitation:
+     ```typescript
+     class UserInvitationService {
+       async inviteUser(
+         tenantId: string,
+         inviterUserId: string,
+         invitation: {
+           email: string;
+           role: UserRole;
+           firstName?: string;
+           lastName?: string;
+         }
+       ): Promise<UserInvitation> {
+         // Validate invitation
+         const existingUser = await this.prisma.user.findFirst({
+           where: {
+             email: invitation.email,
+             tenantId,
+           },
+         });
+         
+         if (existingUser) {
+           throw new BadRequestException('User already exists');
+         }
+         
+         // Generate invitation token
+         const token = this.generateToken();
+         const expiresAt = new Date();
+         expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+         
+         // Create invitation record
+         const userInvitation = await this.prisma.userInvitation.create({
+           data: {
+             token,
+             email: invitation.email,
+             role: invitation.role,
+             firstName: invitation.firstName,
+             lastName: invitation.lastName,
+             tenantId,
+             invitedBy: inviterUserId,
+             expiresAt,
+           },
+         });
+         
+         // Send invitation email
+         const tenant = await this.prisma.tenant.findUnique({
+           where: { id: tenantId },
+         });
+         
+         await this.emailService.sendUserInvitation({
+           to: invitation.email,
+           tenantName: tenant.name,
+           invitationUrl: `${process.env.APP_URL}/accept-invitation?token=${token}`,
+           role: invitation.role,
+           expiresAt,
+         });
+         
+         return userInvitation;
+       }
+       
+       async acceptInvitation(
+         token: string,
+         userData: {
+           password: string;
+           firstName: string;
+           lastName: string;
+         }
+       ): Promise<User> {
+         // Find invitation
+         const invitation = await this.prisma.userInvitation.findUnique({
+           where: { token },
+         });
+         
+         if (!invitation) {
+           throw new NotFoundException('Invitation not found');
+         }
+         
+         if (invitation.expiresAt < new Date()) {
+           throw new BadRequestException('Invitation has expired');
+         }
+         
+         // Create user
+         const user = await this.prisma.user.create({
+           data: {
+             email: invitation.email,
+             password: await this.hashPassword(userData.password),
+             firstName: userData.firstName || invitation.firstName,
+             lastName: userData.lastName || invitation.lastName,
+             role: invitation.role,
+             tenantId: invitation.tenantId,
+             status: 'ACTIVE',
+           },
+         });
+         
+         // Remove invitation
+         await this.prisma.userInvitation.delete({
+           where: { id: invitation.id },
+         });
+         
+         return user;
+       }
+     }
+     ```
+
+### Branding & Customization
+
+1. **Visual Identity**
+   * Logo upload and cropping
+   * Color scheme selection
+   * Typography settings
+   * Example logo uploader:
+     ```tsx
+     const LogoUploader: React.FC<OnboardingStepProps<{ logoUrl: string }>> = ({
+       onComplete,
+       initialData,
+     }) => {
+       const [logo, setLogo] = useState<File | null>(null);
+       const [preview, setPreview] = useState<string>(initialData?.logoUrl || '');
+       const [uploading, setUploading] = useState<boolean>(false);
+       const [error, setError] = useState<string | null>(null);
+       
+       const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+         const file = event.target.files?.[0];
+         
+         if (!file) {
+           return;
+         }
+         
+         // Validate file type
+         if (!file.type.startsWith('image/')) {
+           setError('Please select an image file');
+           return;
+         }
+         
+         // Validate file size (max 2MB)
+         if (file.size > 2 * 1024 * 1024) {
+           setError('Image size should be less than 2MB');
+           return;
+         }
+         
+         setLogo(file);
+         setPreview(URL.createObjectURL(file));
+         setError(null);
+       };
+       
+       const handleUpload = async () => {
+         if (!logo) {
+           return;
+         }
+         
+         setUploading(true);
+         
+         try {
+           // Create form data
+           const formData = new FormData();
+           formData.append('logo', logo);
+           
+           // Upload logo
+           const response = await api.uploadTenantLogo(formData);
+           
+           // Complete step
+           onComplete({ logoUrl: response.logoUrl });
+         } catch (error) {
+           console.error('Logo upload failed', error);
+           setError('Failed to upload logo. Please try again.');
+         } finally {
+           setUploading(false);
+         }
+       };
+       
+       return (
+         <div className="logo-uploader">
+           <div className="upload-area">
+             {preview ? (
+               <div className="logo-preview">
+                 <img src={preview} alt="Logo preview" />
+                 <button 
+                   className="remove-button"
+                   onClick={() => {
+                     setLogo(null);
+                     setPreview('');
+                   }}
+                 >
+                   Remove
+                 </button>
+               </div>
+             ) : (
+               <div className="dropzone">
+                 <input
+                   type="file"
+                   accept="image/*"
+                   onChange={handleFileChange}
+                   id="logo-input"
+                   className="hidden-input"
+                 />
+                 <label htmlFor="logo-input" className="upload-label">
+                   <div className="upload-icon">
+                     <UploadIcon />
+                   </div>
+                   <div className="upload-text">
+                     <p>Drag and drop your logo here or click to browse</p>
+                     <p className="text-sm">PNG, JPG, or SVG. Max 2MB.</p>
+                   </div>
+                 </label>
+               </div>
+             )}
+           </div>
+           
+           {error && (
+             <div className="error-message">{error}</div>
+           )}
+           
+           <div className="actions">
+             <button
+               className="primary-button"
+               onClick={handleUpload}
+               disabled={!logo || uploading}
+             >
+               {uploading ? 'Uploading...' : 'Upload Logo'}
+             </button>
+           </div>
+         </div>
+       );
+     };
+     ```
+
+2. **Theme Configuration**
+   * Theme selection from templates
+   * Custom CSS options
+   * Mobile preview
+   * Example theme selector:
+     ```tsx
+     interface Theme {
+       id: string;
+       name: string;
+       thumbnail: string;
+       description: string;
+     }
+     
+     const ThemeSelector: React.FC<OnboardingStepProps<{ themeId: string }>> = ({
+       onComplete,
+       initialData,
+     }) => {
+       const [selectedThemeId, setSelectedThemeId] = useState<string>(
+         initialData?.themeId || ''
+       );
+       
+       const { data: themes, isLoading } = useQuery<Theme[]>(
+         ['themes'],
+         () => api.getAvailableThemes()
+       );
+       
+       const handleSelectTheme = (themeId: string) => {
+         setSelectedThemeId(themeId);
+       };
+       
+       const handleApplyTheme = async () => {
+         if (!selectedThemeId) {
+           return;
+         }
+         
+         try {
+           // Apply theme
+           await api.applyTheme(selectedThemeId);
+           
+           // Complete step
+           onComplete({ themeId: selectedThemeId });
+         } catch (error) {
+           console.error('Failed to apply theme', error);
+         }
+       };
+       
+       if (isLoading) {
+         return <div>Loading themes...</div>;
+       }
+       
+       return (
+         <div className="theme-selector">
+           <div className="themes-grid">
+             {themes?.map(theme => (
+               <div 
+                 key={theme.id}
+                 className={`theme-card ${selectedThemeId === theme.id ? 'selected' : ''}`}
+                 onClick={() => handleSelectTheme(theme.id)}
+               >
+                 <div className="theme-thumbnail">
+                   <img src={theme.thumbnail} alt={theme.name} />
+                 </div>
+                 <div className="theme-info">
+                   <h4>{theme.name}</h4>
+                   <p>{theme.description}</p>
+                 </div>
+               </div>
+             ))}
+           </div>
+           
+           <div className="actions">
+             <button
+               className="primary-button"
+               onClick={handleApplyTheme}
+               disabled={!selectedThemeId}
+             >
+               Apply Theme
+             </button>
+           </div>
+         </div>
+       );
+     };
+     ```
+
+### Payment Integration
+
+1. **Payment Provider Setup**
+   * Connect payment gateway (Stripe)
+   * Configure payment methods
+   * Set up payouts
+   * Example Stripe Connect flow:
+     ```tsx
+     const PaymentSetup: React.FC<OnboardingStepProps<{ connected: boolean }>> = ({
+       onComplete,
+       initialData,
+     }) => {
+       const [isConnected, setIsConnected] = useState<boolean>(
+         initialData?.connected || false
+       );
+       
+       const [connectionStatus, setConnectionStatus] = useState<string>('');
+       
+       useEffect(() => {
+         // Check connection status on mount
+         const checkStatus = async () => {
+           try {
+             const status = await api.getStripeConnectionStatus();
+             setIsConnected(status.connected);
+             setConnectionStatus(status.status);
+           } catch (error) {
+             console.error('Failed to check connection status', error);
+           }
+         };
+         
+         checkStatus();
+         
+         // Poll for status changes if not connected
+         let interval: NodeJS.Timeout;
+         
+         if (!isConnected) {
+           interval = setInterval(checkStatus, 5000);
+         }
+         
+         return () => {
+           if (interval) {
+             clearInterval(interval);
+           }
+         };
+       }, [isConnected]);
+       
+       const handleConnect = async () => {
+         try {
+           // Create Stripe Connect account link
+           const result = await api.createStripeConnectAccount();
+           
+           // Open Stripe Connect flow in new window
+           window.open(result.url, '_blank');
+           
+           // Set status to connecting
+           setConnectionStatus('connecting');
+         } catch (error) {
+           console.error('Failed to start Stripe connection', error);
+         }
+       };
+       
+       useEffect(() => {
+         // Complete step if connected
+         if (isConnected) {
+           onComplete({ connected: true });
+         }
+       }, [isConnected, onComplete]);
+       
+       return (
+         <div className="payment-setup">
+           <div className="connection-status">
+             {isConnected ? (
+               <div className="status-connected">
+                 <CheckCircleIcon />
+                 <h4>Payment account connected</h4>
+                 <p>Your Stripe account is successfully connected and ready to process payments.</p>
+               </div>
+             ) : (
+               <div className="status-disconnected">
+                 <h4>Connect your payment account</h4>
+                 <p>You need to connect a Stripe account to receive payments.</p>
+                 
+                 {connectionStatus === 'connecting' ? (
+                   <div className="connecting-message">
+                     <Spinner />
+                     <p>Waiting for connection to complete...</p>
+                     <p className="text-sm">Please complete the Stripe onboarding in the new tab.</p>
+                   </div>
+                 ) : (
+                   <button
+                     className="primary-button"
+                     onClick={handleConnect}
+                   >
+                     Connect Stripe Account
+                   </button>
+                 )}
+               </div>
+             )}
+           </div>
+           
+           {isConnected && (
+             <div className="payment-methods">
+               <h4>Supported Payment Methods</h4>
+               <p>These payment methods are enabled based on your region.</p>
+               
+               <div className="payment-methods-grid">
+                 {/* Payment method icons */}
+                 <div className="payment-method">
+                   <CreditCardIcon />
+                   <span>Credit Card</span>
+                 </div>
+                 <div className="payment-method">
+                   <ApplePayIcon />
+                   <span>Apple Pay</span>
+                 </div>
+                 <div className="payment-method">
+                   <GooglePayIcon />
+                   <span>Google Pay</span>
+                 </div>
+               </div>
+             </div>
+           )}
+         </div>
+       );
+     };
+     ```
+
+### Product Catalog
+
+1. **Initial Product Setup**
+   * Template-based catalog generation
+   * Manual product entry
+   * Bulk import from CSV
+   * Example product import:
+     ```tsx
+     const ProductImport: React.FC<OnboardingStepProps<{ productsImported: number }>> = ({
+       onComplete,
+       initialData,
+     }) => {
+       const [importMethod, setImportMethod] = useState<'template' | 'csv' | 'manual'>('template');
+       const [isImporting, setIsImporting] = useState<boolean>(false);
+       const [importProgress, setImportProgress] = useState<number>(0);
+       const [importError, setImportError] = useState<string | null>(null);
+       const [importResult, setImportResult] = useState<{
+         total: number;
+         success: number;
+         failed: number;
+       } | null>(null);
+       
+       const [csvFile, setCsvFile] = useState<File | null>(null);
+       const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+       
+       const { data: templates } = useQuery<{ id: string; name: string; description: string; productCount: number }[]>(
+         ['product-templates'],
+         () => api.getProductTemplates()
+       );
+       
+       const handleCsvFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+         const file = event.target.files?.[0];
+         
+         if (!file) {
+           return;
+         }
+         
+         // Validate file type
+         if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+           setImportError('Please select a CSV file');
+           return;
+         }
+         
+         setCsvFile(file);
+         setImportError(null);
+       };
+       
+       const handleImportTemplate = async () => {
+         if (!selectedTemplate) {
+           return;
+         }
+         
+         setIsImporting(true);
+         setImportProgress(0);
+         setImportError(null);
+         
+         try {
+           // Start import job
+           const importJob = await api.importProductTemplate(selectedTemplate);
+           
+           // Poll job status
+           const intervalId = setInterval(async () => {
+             const status = await api.getImportJobStatus(importJob.id);
+             
+             setImportProgress(status.progress);
+             
+             if (status.status === 'completed') {
+               clearInterval(intervalId);
+               setIsImporting(false);
+               setImportResult({
+                 total: status.total,
+                 success: status.success,
+                 failed: status.failed,
+               });
+               
+               // Complete step
+               onComplete({ productsImported: status.success });
+             } else if (status.status === 'failed') {
+               clearInterval(intervalId);
+               setIsImporting(false);
+               setImportError(status.error || 'Import failed');
+             }
+           }, 1000);
+           
+         } catch (error) {
+           setIsImporting(false);
+           setImportError('Failed to start import');
+           console.error('Failed to start import', error);
+         }
+       };
+       
+       const handleImportCsv = async () => {
+         if (!csvFile) {
+           return;
+         }
+         
+         setIsImporting(true);
+         setImportProgress(0);
+         setImportError(null);
+         
+         try {
+           // Create form data
+           const formData = new FormData();
+           formData.append('file', csvFile);
+           
+           // Start import job
+           const importJob = await api.importProductsCsv(formData);
+           
+           // Poll job status
+           const intervalId = setInterval(async () => {
+             const status = await api.getImportJobStatus(importJob.id);
+             
+             setImportProgress(status.progress);
+             
+             if (status.status === 'completed') {
+               clearInterval(intervalId);
+               setIsImporting(false);
+               setImportResult({
+                 total: status.total,
+                 success: status.success,
+                 failed: status.failed,
+               });
+               
+               // Complete step
+               onComplete({ productsImported: status.success });
+             } else if (status.status === 'failed') {
+               clearInterval(intervalId);
+               setIsImporting(false);
+               setImportError(status.error || 'Import failed');
+             }
+           }, 1000);
+           
+         } catch (error) {
+           setIsImporting(false);
+           setImportError('Failed to start import');
+           console.error('Failed to start import', error);
+         }
+       };
+       
+       return (
+         <div className="product-import">
+           <div className="import-method-selector">
+             <div className="method-tabs">
+               <button
+                 className={`tab ${importMethod === 'template' ? 'active' : ''}`}
+                 onClick={() => setImportMethod('template')}
+               >
+                 Use Template
+               </button>
+               <button
+                 className={`tab ${importMethod === 'csv' ? 'active' : ''}`}
+                 onClick={() => setImportMethod('csv')}
+               >
+                 Import CSV
+               </button>
+               <button
+                 className={`tab ${importMethod === 'manual' ? 'active' : ''}`}
+                 onClick={() => setImportMethod('manual')}
+               >
+                 Add Manually
+               </button>
+             </div>
+             
+             <div className="method-content">
+               {importMethod === 'template' && (
+                 <div className="template-selector">
+                   <h4>Choose a Product Template</h4>
+                   <p>Start with a pre-built catalog of sample products and customize them later.</p>
+                   
+                   <div className="templates-grid">
+                     {templates?.map(template => (
+                       <div
+                         key={template.id}
+                         className={`template-card ${selectedTemplate === template.id ? 'selected' : ''}`}
+                         onClick={() => setSelectedTemplate(template.id)}
+                       >
+                         <h5>{template.name}</h5>
+                         <p>{template.description}</p>
+                         <div className="template-info">
+                           <span>{template.productCount} products</span>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                   
+                   <button
+                     className="primary-button"
+                     onClick={handleImportTemplate}
+                     disabled={!selectedTemplate || isImporting}
+                   >
+                     {isImporting ? 'Importing...' : `Import Template Products`}
+                   </button>
+                 </div>
+               )}
+               
+               {importMethod === 'csv' && (
+                 <div className="csv-uploader">
+                   <h4>Import Products from CSV</h4>
+                   <p>Upload a CSV file with your products. <a href="/templates/products.csv" download>Download Template</a></p>
+                   
+                   <div className="upload-area">
+                     <input
+                       type="file"
+                       accept=".csv"
+                       onChange={handleCsvFileChange}
+                       id="csv-input"
+                       className="hidden-input"
+                     />
+                     <label htmlFor="csv-input" className="upload-label">
+                       <div className="upload-icon">
+                         <UploadIcon />
+                       </div>
+                       <div className="upload-text">
+                         <p>Drag and drop your CSV file here or click to browse</p>
+                         <p className="text-sm">CSV files only.</p>
+                       </div>
+                     </label>
+                     
+                     {csvFile && (
+                       <div className="file-info">
+                         <FileIcon />
+                         <span>{csvFile.name}</span>
+                         <button
+                           className="remove-button"
+                           onClick={() => setCsvFile(null)}
+                         >
+                           Remove
+                         </button>
+                       </div>
+                     )}
+                   </div>
+                   
+                   <button
+                     className="primary-button"
+                     onClick={handleImportCsv}
+                     disabled={!csvFile || isImporting}
+                   >
+                     {isImporting ? 'Importing...' : 'Import Products'}
+                   </button>
+                 </div>
+               )}
+               
+               {importMethod === 'manual' && (
+                 <div className="manual-entry">
+                   <h4>Add Products Manually</h4>
+                   <p>You can add products one by one after completing the onboarding.</p>
+                   
+                   <button
+                     className="primary-button"
+                     onClick={() => onComplete({ productsImported: 0 })}
+                   >
+                     Skip Now, Add Later
+                   </button>
+                 </div>
+               )}
+             </div>
+           </div>
+           
+           {isImporting && (
+             <div className="import-progress">
+               <ProgressBar value={importProgress} />
+               <p>Importing products... {importProgress}%</p>
+             </div>
+           )}
+           
+           {importError && (
+             <div className="import-error">
+               <ErrorIcon />
+               <p>{importError}</p>
+             </div>
+           )}
+           
+           {importResult && (
+             <div className="import-result">
+               <CheckCircleIcon />
+               <h4>Import Completed</h4>
+               <p>Successfully imported {importResult.success} of {importResult.total} products.</p>
+               
+               {importResult.failed > 0 && (
+                 <p className="text-warning">
+                   Failed to import {importResult.failed} products. 
+                   <a href="/import-errors" target="_blank" rel="noopener noreferrer">
+                     View errors
+                   </a>
+                 </p>
+               )}
+             </div>
+           )}
+         </div>
+       );
+     };
+     ```
+
+### Launch Preparation
+
+1. **Pre-Launch Checklist**
+   * Validate required configuration
+   * Test critical flows
+   * Preview storefront
+   * Example launch checklist:
+     ```tsx
+     const LaunchChecklist: React.FC<OnboardingStepProps<{ completed: boolean }>> = ({
+       onComplete,
+       initialData,
+     }) => {
+       const { data: checklist, isLoading } = useQuery(
+         ['launch-checklist'],
+         () => api.getLaunchChecklist()
+       );
+       
+       const handleLaunch = async () => {
+         try {
+           // Activate store
+           await api.activateStore();
+           
+           // Complete onboarding
+           onComplete({ completed: true });
+         } catch (error) {
+           console.error('Failed to launch store', error);
+         }
+       };
+       
+       if (isLoading) {
+         return <div>Loading checklist...</div>;
+       }
+       
+       const requiredItems = checklist?.items.filter(item => item.required) || [];
+       const optionalItems = checklist?.items.filter(item => !item.required) || [];
+       
+       const requiredCompleted = requiredItems.every(item => item.completed);
+       const optionalCompleted = optionalItems.every(item => item.completed);
+       const allCompleted = requiredCompleted && optionalCompleted;
+       
+       return (
+         <div className="launch-checklist">
+           <div className="checklist-status">
+             <h4>Pre-Launch Checklist</h4>
+             <p>Complete these items before launching your store.</p>
+             
+             <div className="checklist-progress">
+               <ProgressBar 
+                 value={checklist ? 
+                   (checklist.items.filter(item => item.completed).length / checklist.items.length) * 100 
+                   : 0
+                 } 
+               />
+               <span>
+                 {checklist?.items.filter(item => item.completed).length || 0} 
+                 of {checklist?.items.length || 0} completed
+               </span>
+             </div>
+           </div>
+           
+           <div className="checklist-sections">
+             <div className="checklist-section">
+               <h5>Required Items</h5>
+               <ul className="checklist-items">
+                 {requiredItems.map(item => (
+                   <li key={item.id} className={item.completed ? 'completed' : ''}>
+                     {item.completed ? <CheckCircleIcon /> : <CircleIcon />}
+                     <div className="item-content">
+                       <span className="item-name">{item.name}</span>
+                       <span className="item-description">{item.description}</span>
+                     </div>
+                     {!item.completed && (
+                       <a href={item.actionUrl} className="action-link">
+                         Complete
+                       </a>
+                     )}
+                   </li>
+                 ))}
+               </ul>
+             </div>
+             
+             <div className="checklist-section">
+               <h5>Recommended Items</h5>
+               <ul className="checklist-items">
+                 {optionalItems.map(item => (
+                   <li key={item.id} className={item.completed ? 'completed' : ''}>
+                     {item.completed ? <CheckCircleIcon /> : <CircleIcon />}
+                     <div className="item-content">
+                       <span className="item-name">{item.name}</span>
+                       <span className="item-description">{item.description}</span>
+                     </div>
+                     {!item.completed && (
+                       <a href={item.actionUrl} className="action-link">
+                         Complete
+                       </a>
+                     )}
+                   </li>
+                 ))}
+               </ul>
+             </div>
+           </div>
+           
+           <div className="preview-section">
+             <h4>Preview Your Store</h4>
+             <p>See how your store looks before launching.</p>
+             
+             <div className="preview-buttons">
+               <a 
+                 href="/preview" 
+                 target="_blank" 
+                 rel="noopener noreferrer"
+                 className="secondary-button"
+               >
+                 Desktop Preview
+               </a>
+               <a 
+                 href="/preview?mobile=true" 
+                 target="_blank" 
+                 rel="noopener noreferrer"
+                 className="secondary-button"
+               >
+                 Mobile Preview
+               </a>
+             </div>
+           </div>
+           
+           <div className="launch-actions">
+             <button
+               className="primary-button launch-button"
+               onClick={handleLaunch}
+               disabled={!requiredCompleted}
+             >
+               Launch Store
+             </button>
+             
+             {!requiredCompleted && (
+               <p className="launch-warning">
+                 Please complete all required items before launching.
+               </p>
+             )}
+           </div>
+         </div>
+       );
+     };
+     ```
+
+By implementing this comprehensive onboarding process, we ensure that new tenants can quickly and efficiently set up their stores on our platform, increasing adoption success and reducing time-to-value.

@@ -1,0 +1,76 @@
+---
+description: Service Level Agreements and uptime commitments
+globs: 
+alwaysApply: false
+---
+
+# SLA Commitments
+
+This document outlines the Service Level Agreements (SLAs) for the e-commerce platform, which vary by tenant subscription tier.
+
+## Uptime Guarantees
+
+| Tier | Monthly Uptime | Maximum Downtime |
+|------|----------------|------------------|
+| Basic | 99.9% | 43 minutes/month |
+| Professional | 99.95% | 22 minutes/month |
+| Enterprise | 99.99% | 4.3 minutes/month |
+
+Uptime is calculated based on:
+- Availability of core services (storefront, checkout, admin)
+- Measured by external monitoring from multiple regions
+- Excludes scheduled maintenance windows
+
+## Incident Response Times
+
+| Severity | Description | Response Target | Resolution Target |
+|----------|-------------|-----------------|-------------------|
+| Critical (P1) | Complete service outage | 15 minutes | 4 hours |
+| High (P2) | Major feature unavailable | 1 hour | 8 hours |
+| Medium (P3) | Degraded performance | 4 hours | 24 hours |
+| Low (P4) | Minor issues | 1 business day | 5 business days |
+
+Response time is measured from the moment an incident is reported via official channels.
+
+## Maintenance Windows
+
+- **Standard Maintenance**: Sundays, 01:00-05:00 UTC
+- **Emergency Maintenance**: As needed with best-effort notification
+- **Advance Notice**:
+  - Basic/Professional: 7 days for standard maintenance
+  - Enterprise: 14 days for standard maintenance, 24 hours for emergency
+
+## Compensation for SLA Violations
+
+Service credits are issued as a percentage of monthly fees:
+
+| Monthly Uptime | Credit Percentage |
+|----------------|-------------------|
+| < 99.9% | 10% |
+| < 99.5% | 25% |
+| < 99.0% | 50% |
+
+## Reporting and Verification
+
+- Monthly uptime reports provided in admin dashboard
+- Incident reports for any significant outages
+- Response time metrics for support interactions
+
+## Support Channels and Hours
+
+| Tier | Support Channels | Support Hours |
+|------|------------------|---------------|
+| Basic | Email, Knowledge Base | Business days, 9am-5pm |
+| Professional | Email, Chat, Phone | Business days, 24/5 |
+| Enterprise | Email, Chat, Phone, Dedicated Agent | 24/7/365 |
+
+## Exclusions
+
+SLAs do not apply to:
+- Force majeure events
+- Issues caused by tenant customizations
+- Third-party service outages outside our control
+- Scheduled maintenance windows
+- Beta or preview features explicitly marked as such
+
+These SLA commitments form the basis of our reliability contract with tenants and guide our operations and incident response.

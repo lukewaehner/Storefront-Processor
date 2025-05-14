@@ -1,0 +1,373 @@
+---
+description: Infrastructure and DevOps implementation guidelines
+globs: "infrastructure/**/*"
+alwaysApply: true
+---
+
+# Infrastructure & DevOps Conventions
+
+This document outlines the conventions and best practices for infrastructure and DevOps in our multi-tenant e-commerce platform.
+
+## Cloud Architecture
+
+### Provider Selection
+
+1. **Primary Provider**: AWS
+   * Preferred services:
+     * Compute: ECS/Fargate (containerized services)
+     * Database: RDS PostgreSQL
+     * Caching: ElastiCache Redis
+     * Storage: S3
+     * CDN: CloudFront
+     * Logging: CloudWatch
+
+2. **Alternative Providers**
+   * Azure as secondary/backup provider
+   * Vercel for frontend hosting (optional)
+   * Managed Kubernetes (EKS) for complex orchestration
+
+### Infrastructure as Code
+
+1. **Terraform**
+   * Use for provisioning all cloud resources
+   * Store state in S3 with DynamoDB locking
+   * Organize by environment and component
+   * Follow module pattern for reusability
+
+2. **Directory Structure**
+   ```
+   terraform/
+   ├── environments/
+   │   ├── dev/
+   │   ├── staging/
+   │   └── prod/
+   ├── modules/
+   │   ├── networking/
+   │   ├── database/
+   │   ├── compute/
+   │   ├── storage/
+   │   └── monitoring/
+   └── variables/
+       ├── dev.tfvars
+       ├── staging.tfvars
+       └── prod.tfvars
+   ```
+
+3. **Naming Convention**
+   * Resources: `{project}-{env}-{resource-type}-{purpose}`
+   * Example: `ecomm-prod-rds-primary`
+   * Use consistent casing (kebab-case preferred)
+   * Add proper description and tags to all resources
+
+## Containerization
+
+### Docker Standards
+
+1. **Base Images**
+   * Use official Node.js Alpine images
+   * Pin versions explicitly (`node:18.15.0-alpine`)
+   * Use multi-stage builds to minimize image size
+   * Implement regular base image updates
+
+2. **Dockerfile Patterns**
+   * Optimize layer caching
+   * Install only production dependencies
+   * Use non-root users
+   * Set proper health checks
+   * Example:
+     ```dockerfile
+     # Build stage
+     FROM node:18.15.0-alpine AS build
+     WORKDIR /app
+     COPY package*.json ./
+     RUN npm ci
+     COPY . .
+     RUN npm run build
+     
+     # Production stage
+     FROM node:18.15.0-alpine
+     WORKDIR /app
+     # Create non-root user
+     RUN addgroup -g 1001 -S nodejs && \
+         adduser -S nodejs -u 1001
+     COPY --from=build --chown=nodejs:nodejs /app/dist /app/dist
+     COPY --from=build --chown=nodejs:nodejs /app/node_modules /app/node_modules
+     COPY --from=build --chown=nodejs:nodejs /app/package.json /app/
+     USER nodejs
+     EXPOSE 3000
+     HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+       CMD wget -O- http://localhost:3000/health || exit 1
+     CMD ["node", "dist/main.js"]
+     ```
+
+3. **Image Security**
+   * Scan images for vulnerabilities (Trivy, Clair)
+   * Remove unnecessary packages
+   * Don't include secrets in images
+   * Use content trust for image signing
+
+### Container Orchestration
+
+1. **Kubernetes/ECS**
+   * Organize by namespaces/clusters (dev, staging, prod)
+   * Implement horizontal pod autoscaling
+   * Configure resource requests and limits
+   * Add proper health checks and readiness probes
+
+2. **Deployment Configuration**
+   * Use Helm charts or ECS task definitions
+   * Implement zero-downtime deployments
+   * Configure appropriate replicas for redundancy
+   * Set up inter-service communication patterns
+
+3. **Security Considerations**
+   * Apply pod security policies
+   * Implement network policies for isolation
+   * Use service mesh for advanced traffic management
+   * Secure secrets management with vault integration
+
+## CI/CD Pipeline
+
+### Pipeline Architecture
+
+1. **GitHub Actions**
+   * Implement workflow for each repository
+   * Trigger builds on push/PR to main branches
+   * Create separate workflows for infrastructure and applications
+   * Use reusable actions for common tasks
+
+2. **Pipeline Stages**
+   * **Build**: Compile and create artifacts
+   * **Test**: Run unit, integration, and security tests
+   * **Security**: Static analysis and dependency scanning
+   * **Package**: Create container images
+   * **Deploy**: Push to environments (dev, staging, prod)
+   * **Verify**: Run smoke tests and integration tests
+
+3. **Environment Progression**
+   * Auto-deploy to dev on successful build
+   * Require approval for staging deployment
+   * Deploy to prod with manual approval
+   * Implement canary or blue-green for production
+
+### CI/CD Workflow Example
+
+```yaml
+name: Backend Service CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run linter
+        run: npm run lint
+      - name: Run tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: build
+          path: dist/
+
+  security:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run security audit
+        run: npm audit --production
+      - name: Run SAST scan
+        uses: github/codeql-action/analyze@v2
+
+  package:
+    needs: [build, security]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: build
+          path: dist/
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_REGISTRY }}/backend-service:${{ github.sha }}
+
+  deploy-dev:
+    needs: package
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Dev
+        uses: ./.github/actions/deploy
+        with:
+          environment: dev
+          image: ${{ secrets.DOCKER_REGISTRY }}/backend-service:${{ github.sha }}
+          token: ${{ secrets.DEPLOY_TOKEN }}
+      - name: Verify deployment
+        run: ./scripts/verify-deployment.sh dev
+```
+
+## Networking & Security
+
+### Network Architecture
+
+1. **VPC Design**
+   * Separate VPC per environment
+   * Public and private subnets across AZs
+   * Proper route tables and NACLs
+   * VPC Endpoints for AWS services
+
+2. **Load Balancing**
+   * Application Load Balancers for HTTP/HTTPS
+   * TLS termination at load balancer
+   * Health checks and circuit breaking
+   * WAF integration for additional security
+
+3. **Service Mesh** (for Kubernetes)
+   * Implement Istio or AWS App Mesh
+   * Advanced traffic management
+   * Mutual TLS between services
+   * Observability and telemetry
+
+### Security Architecture
+
+1. **Identity & Access Management**
+   * Follow principle of least privilege
+   * Use IAM roles for services
+   * Implement temporary credentials
+   * Regularly audit permissions
+
+2. **Secret Management**
+   * AWS Secrets Manager or HashiCorp Vault
+   * Rotate secrets automatically
+   * Encrypt sensitive configuration
+   * Inject secrets securely into containers
+
+3. **Network Security**
+   * Security groups with minimal access
+   * Private subnets for data tier
+   * VPN or Direct Connect for admin access
+   * DDoS protection with Shield
+
+## Monitoring & Observability
+
+### Telemetry Collection
+
+1. **Logging**
+   * Centralize logs in CloudWatch Logs
+   * Structured JSON log format
+   * Include correlation IDs
+   * Set appropriate retention periods
+
+2. **Metrics**
+   * Collect service and infrastructure metrics
+   * Store in Prometheus or CloudWatch Metrics
+   * Set thresholds for alerting
+   * Create custom metrics for business KPIs
+
+3. **Tracing**
+   * Implement distributed tracing with OpenTelemetry
+   * Sample appropriate percentage of requests
+   * Visualize with Jaeger or X-Ray
+   * Trace cross-service communication
+
+### Monitoring Stack
+
+1. **Dashboarding**
+   * Grafana for metrics visualization
+   * Service dashboards for each component
+   * Business metrics dashboards
+   * Operational dashboards for on-call
+
+2. **Alerting**
+   * Define alert severity levels
+   * Configure notification channels (Slack, SMS, Email)
+   * Implement alert grouping and deduplication
+   * Create runbooks for common alerts
+
+3. **Health Checks**
+   * Implement `/health` endpoints
+   * Configure readiness and liveness probes
+   * External uptime monitoring
+   * Synthetic transactions for critical paths
+
+## Disaster Recovery & Backup
+
+### Backup Strategy
+
+1. **Database Backups**
+   * Automated daily RDS snapshots
+   * Point-in-time recovery configuration
+   * Logical backups for selective restoration
+   * Test restores quarterly
+
+2. **Configuration Backups**
+   * Version control for infrastructure code
+   * Backup Terraform state
+   * Document external configurations
+   * Regularly export tenant configurations
+
+3. **Object Storage**
+   * Enable S3 versioning
+   * Configure lifecycle policies
+   * Cross-region replication for critical buckets
+   * Secure access controls
+
+### Disaster Recovery
+
+1. **Recovery Strategy**
+   * Define RTO and RPO for each component
+   * Document recovery procedures
+   * Implement automated recovery where possible
+   * Train team on disaster scenarios
+
+2. **Multi-Region Resilience**
+   * Active-passive or active-active configuration
+   * DNS-based failover with Route 53
+   * Data replication across regions
+   * Regular failover testing
+
+3. **Recovery Testing**
+   * Scheduled DR drills
+   * Chaos engineering practices
+   * Documenting lessons learned
+   * Improving procedures iteratively
+
+By following these infrastructure and DevOps conventions, we ensure a reliable, secure, and maintainable platform that can scale to accommodate our multi-tenant requirements.

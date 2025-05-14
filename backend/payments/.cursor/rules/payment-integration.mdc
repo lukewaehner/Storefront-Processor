@@ -1,0 +1,171 @@
+---
+description: Payment integration implementation guidelines
+globs: "backend/payments/**/*"
+alwaysApply: true
+---
+
+# Payment Integration Implementation
+
+This document outlines the implementation details for integrating payment processing into our multi-tenant e-commerce platform, with a focus on Stripe Connect.
+
+## Architecture Overview
+
+### Payment Provider Strategy
+
+1. **Provider Abstraction**
+   * Create `PaymentProvider` interface
+   * Implement `StripePaymentProvider` as primary
+   * Consider alternative providers (Square, PayPal) as future implementations
+   * Support provider-specific features through extension methods
+
+2. **Multi-Tenant Design**
+   * Map each tenant to a Stripe Connect account
+   * Route charges to appropriate connected account
+   * Calculate and collect platform fees automatically
+   * Support both Standard and Express Connect account types
+
+## Core Payment Flows
+
+### Merchant Onboarding
+
+1. **Account Creation**
+   * Endpoint: `POST /payments/connect/accounts`
+   * Create Stripe Connected Account
+   * Store account ID with tenant
+   * Set webhook endpoint for notifications
+   * Initialize account with basic information
+
+2. **Onboarding Experience**
+   * Endpoint: `POST /payments/connect/account-links`
+   * Generate Stripe AccountLinks for onboarding
+   * Configure return and refresh URLs
+   * Track onboarding completion status
+   * Handle onboarding abandonment
+
+3. **Account Verification**
+   * Monitor `account.updated` webhook events
+   * Track verification status and requirements
+   * Notify merchants of outstanding requirements
+   * Support uploading verification documents
+
+### Payment Processing
+
+1. **Payment Intent Creation**
+   * Endpoint: `POST /payments/create-intent`
+   * Create `PaymentIntent` with order details
+   * Set `transfer_data` for connected account
+   * Calculate and apply `application_fee_amount`
+   * Return client secret for frontend checkout
+
+2. **Payment Methods**
+   * Support credit/debit cards by default
+   * Enable regional payment methods based on merchant location
+   * Implement saved payment methods for customers
+   * Handle 3D Secure authentication when required
+
+3. **Order Fulfillment**
+   * Tie payment success to order status updates
+   * Implement webhook handler for `payment_intent.succeeded`
+   * Create fulfillment workflows based on payment status
+   * Handle payment failures gracefully
+
+### Refunds and Disputes
+
+1. **Refund Processing**
+   * Endpoint: `POST /payments/refunds`
+   * Support full and partial refunds
+   * Adjust platform fees proportionally
+   * Update order status on successful refund
+   * Notify customer of refund status
+
+2. **Dispute Handling**
+   * Monitor `charge.dispute.created` webhook
+   * Create dispute resolution workflow
+   * Collect evidence from merchant
+   * Submit evidence via API
+   * Track dispute lifecycle
+
+## Webhooks & Events
+
+1. **Webhook Implementation**
+   * Endpoint: `POST /payments/webhooks`
+   * Verify webhook signatures
+   * Implement idempotent event processing
+   * Route events to appropriate handlers
+   * Log all webhook activities
+
+2. **Critical Events**
+   * `payment_intent.succeeded`: Mark payment complete
+   * `payment_intent.payment_failed`: Handle failure
+   * `account.updated`: Track account status
+   * `charge.refunded`: Process refund
+   * `charge.dispute.created`: Handle dispute
+
+3. **Event Processing**
+   * Create `PaymentEventProcessor` service
+   * Register handlers for each event type
+   * Implement retry logic for processing failures
+   * Maintain event processing history
+
+## Reporting & Reconciliation
+
+1. **Transaction Recording**
+   * Store transaction details in local database
+   * Record gross amount, platform fee, payment fee, net amount
+   * Link transactions to orders
+   * Support querying by date range, status, amount
+
+2. **Payout Reconciliation**
+   * Track Stripe payouts via webhooks
+   * Match transactions to payouts
+   * Provide payout reports to merchants
+   * Calculate platform revenue
+
+3. **Financial Dashboards**
+   * Merchant revenue overview
+   * Platform fee summaries
+   * Transaction volume trends
+   * Refund and dispute metrics
+
+## Security & Compliance
+
+1. **PCI Compliance**
+   * Never handle raw card data in our backend
+   * Use Stripe Elements on frontend
+   * Implement proper TLS throughout
+   * Follow Stripe security best practices
+
+2. **Audit Logging**
+   * Log all payment operations
+   * Include tenant ID, order ID, amount, status
+   * Store actor information for manual operations
+   * Maintain detailed history for disputes
+
+3. **Error Handling**
+   * Gracefully handle Stripe API errors
+   * Implement retry logic with exponential backoff
+   * Provide clear error messages to users
+   * Alert on critical failures
+
+## Technical Implementation
+
+1. **Core Components**
+   * `PaymentsModule`: Main module for payment processing
+   * `PaymentController`: API endpoints
+   * `StripeService`: Stripe API integration
+   * `WebhookController`: Webhook handling
+   * `PaymentRepository`: Data persistence
+
+2. **Database Entities**
+   * `ConnectedAccount`: Tenant payment account information
+   * `Transaction`: Payment transaction details
+   * `Refund`: Refund records
+   * `Dispute`: Dispute tracking
+   * `PayoutRecord`: Merchant payout information
+
+3. **External Dependencies**
+   * Stripe Node.js SDK
+   * Redis for idempotency keys
+   * Webhook signature verification
+
+By implementing this payment integration architecture, we ensure secure, reliable payment processing for all platform tenants while maintaining proper separation and tracking of funds.

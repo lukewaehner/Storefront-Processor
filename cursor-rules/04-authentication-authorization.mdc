@@ -1,0 +1,177 @@
+# Authentication & Authorization Notes
+
+## Tech Stack & Conventions
+
+- **Identity Provider Options:**
+
+  - **Auth0** (SaaS) or **Keycloak** (self-hosted) for full OAuth2/OpenID Connect flows.
+  - **Custom JWT** implementation via NestJS `@nestjs/jwt` or Express middleware if you prefer more control.
+
+- **Protocols & Standards:**
+
+  - **OAuth2**: Authorization Code Flow for secure server-to-server and SPAs.
+  - **OpenID Connect**: ID token for user identity alongside access token.
+  - **JWT**: JSON Web Tokens for stateless sessions; include custom claims `tenantId` and `roles`.
+  - **Refresh Tokens**: long-lived tokens stored securely (HttpOnly cookies) to obtain new access tokens.
+
+- **Token Storage & Handling:**
+
+  - **Access Tokens**: short TTL (e.g. 15 min) stored in memory or secure cookie.
+  - **Refresh Tokens**: TTL (e.g. 7 days) stored in HttpOnly, Secure cookies with `SameSite=Strict`.
+  - **CSRF Protection**: rotate refresh tokens and validate CSRF tokens for all state-changing requests.
+
+- **Role-Based Access Control (RBAC):**
+
+  - Define roles: `platformAdmin`, `storeAdmin`, `storeUser`, `customer`.
+  - Map permissions to CRUD actions per module (Catalog, Orders, Payments, Settings).
+  - Enforce via NestJS `RolesGuard` or custom middleware checking `roles` claim.
+
+## Security & Best Practices
+
+- **Password Security:**
+
+  - Hash passwords with **bcrypt** (cost ≥ 12 rounds) or **argon2**.
+  - Enforce strong passwords via regex or zxcvbn integration.
+
+- **Account Security:**
+
+  - Optional **MFA** (TOTP or SMS) on critical accounts.
+  - **Brute-force Protection**: rate-limit login attempts per IP and per account.
+  - **Email Verification**: require email confirmation before granting full access.
+
+- **Token Security:**
+
+  - Sign JWTs with asymmetric keys (RS256) stored in Vault/secrets manager.
+  - Rotate signing keys periodically; implement key ID (`kid`) in header.
+  - Validate `iss`, `aud`, `exp`, and `nbf` claims on every request.
+
+- **Session Revocation:**
+
+  - Track refresh tokens in a DB or Redis blacklist to support manual revocation.
+  - Invalidate tokens on logout or password change.
+
+- **Least Privilege:**
+
+  - Grant minimal roles/scopes needed for each endpoint.
+  - Default deny in `RolesGuard` when no matching role.
+
+## GDPR & Privacy Compliance
+
+- **User Consent Management:**
+
+  - Store explicit consent for marketing communications with timestamp.
+  - Implement granular permission toggles for different communication types.
+  - Provide mechanism to withdraw consent at any time.
+
+- **Data Subject Rights:**
+
+  - Implement "Right to Access" endpoint returning all user data.
+  - Support "Right to be Forgotten" with full account deletion process.
+  - Enable data portability with standardized export format.
+
+- **Data Retention:**
+
+  - Define retention periods for each data category:
+    - Account data: retained while account active + 30 days after deletion.
+    - Order history: 7 years for tax/financial compliance.
+    - Browse/search history: 90 days maximum.
+  - Implement automated data purging jobs based on retention policy.
+
+- **Breach Response:**
+
+  - Create notification templates for data breach communications.
+  - Document breach response procedure with 72-hour notification timeline.
+  - Maintain audit log of all access to PII data for forensics.
+
+- **Privacy by Design:**
+  - Perform Data Protection Impact Assessment (DPIA) for high-risk features.
+  - Implement field-level encryption for sensitive PII.
+  - Default to minimal data collection with explicit purpose limitation.
+
+---
+
+# Roadmap / To-Do List
+
+1. **Setup Identity Provider**
+
+   - Decide on Auth0 vs Keycloak vs Custom JWT.
+   - Configure tenant-specific client IDs and secrets.
+   - Set up callback URLs and allowed origins.
+
+2. **Auth Module Initialization**
+
+   - Scaffold NestJS `AuthModule` (or Express routes).
+   - Install libraries (`@nestjs/jwt`, `passport-jwt`, `bcrypt`).
+
+3. **User Schema & Persistence**
+
+   - Extend `User` entity/model with fields: `email`, `passwordHash`, `roles`, `enabled`, `mfaEnabled`, `refreshTokenId`.
+   - Add multi-tenancy field `tenantId`.
+
+4. **Signup & Verification Flow**
+
+   - Endpoint: `/auth/signup` to create user and send verification email.
+   - Generate one-time token for email link; store expiry.
+   - Endpoint: `/auth/verify-email` to activate account.
+
+5. **Login & Token Issuance**
+
+   - Endpoint: `/auth/login` to validate credentials, issue access & refresh tokens.
+   - Set cookies: `access_token`, `refresh_token` with secure flags.
+
+6. **Refresh Token Flow**
+
+   - Endpoint: `/auth/refresh` to rotate refresh token and issue new access token.
+   - Persist refresh token fingerprint and revoke old on rotate.
+
+7. **Logout & Token Revocation**
+
+   - Endpoint: `/auth/logout` to clear cookies and blacklist current refresh token.
+
+8. **OAuth2 Social Logins (optional)**
+
+   - Configure providers (Google, Facebook) via Auth0 or Passport strategies.
+
+9. **Role & Permission Guards**
+
+   - Implement `RolesGuard` to enforce RBAC on controllers and GraphQL resolvers.
+   - Create decorator `@Roles(...)` for endpoint metadata.
+
+10. **MFA Integration (optional)**
+
+    - TOTP setup page for user.
+    - Validate TOTP code on login.
+
+11. **Testing**
+
+    - Unit tests for `AuthService`, guards, and strategies (Jest).
+    - Integration tests for full login/refresh/logout flows.
+
+12. **Documentation**
+
+    - Document OAuth2 flows in `docs/Auth.md`.
+    - Update API docs (Swagger/GraphQL) with security schemes.
+
+13. **Deployment & Configuration**
+
+    - Store secrets in Vault or CSP secrets manager.
+    - Ensure TLS is enforced on auth endpoints.
+
+14. **Monitoring & Alerts**
+
+    - Track suspicious login attempts.
+    - Alert on spike in token errors or failed logins.
+
+15. **GDPR Compliance Endpoints**
+
+    - Implement data access API for user data export.
+    - Build account deletion service with data removal confirmation.
+    - Create consent management endpoints and storage.
+
+16. **Privacy Documentation**
+
+    - Draft privacy policy templates for tenants.
+    - Create data processing documentation for compliance.
+    - Document data flows and retention periods.
+
+---

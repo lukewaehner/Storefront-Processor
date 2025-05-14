@@ -1,0 +1,135 @@
+---
+description: Performance targets and optimization strategies for frontend
+globs: "frontend/**/*"
+alwaysApply: false
+---
+
+# Performance Targets
+
+Frontend performance is critical for user experience and conversion rates. This document outlines our performance targets and strategies for achieving them.
+
+## Core Web Vitals Targets
+
+| Metric | Target | Critical Threshold |
+|--------|--------|-------------------|
+| **LCP** (Largest Contentful Paint) | < 2.5s | < 4.0s |
+| **FID** (First Input Delay) | < 100ms | < 300ms |
+| **CLS** (Cumulative Layout Shift) | < 0.1 | < 0.25 |
+| **TTFB** (Time To First Byte) | < 200ms | < 600ms |
+| **TTI** (Time To Interactive) | < 3.5s | < 7.0s |
+
+These metrics should be measured at the 75th percentile on mid-range mobile devices over simulated 4G connections.
+
+## Bundle Size Budgets
+
+| Resource Type | Target Size (Compressed) |
+|---------------|--------------------------|
+| Initial JS bundle | < 200KB |
+| Initial CSS | < 50KB |
+| Total page weight | < 1MB |
+| Single image | < 200KB |
+
+## Performance Optimization Strategies
+
+### JavaScript Optimization
+
+1. **Code Splitting**
+   * Route-based splitting (automatic with Next.js)
+   * Component-level splitting using dynamic imports
+   * Separate critical from non-critical code
+
+2. **Bundle Optimization**
+   * Tree shaking to eliminate dead code
+   * Defer loading of non-critical third-party scripts
+   * Minimize polyfills for modern browsers
+
+3. **Execution Optimization**
+   * Minimize main thread work
+   * Defer non-critical initialization
+   * Use web workers for CPU-intensive tasks
+
+### Rendering Optimization
+
+1. **Server-Side Rendering**
+   * Implement SSR for all indexable pages
+   * Use Incremental Static Regeneration for catalog pages
+   * Consider streaming rendering for large pages
+
+2. **Client-Side Rendering**
+   * Minimize render blocking resources
+   * Implement progressive hydration
+   * Prioritize above-the-fold content
+
+3. **Component Efficiency**
+   * Memoize expensive components
+   * Virtualize long lists
+   * Debounce input handlers
+   * Throttle scroll and resize events
+
+### Asset Optimization
+
+1. **Images**
+   * Use Next.js Image component with automatic optimization
+   * Choose appropriate format (WebP, AVIF with PNG/JPEG fallbacks)
+   * Implement responsive images with srcset
+   * Lazy load below-the-fold images
+
+2. **Fonts**
+   * Limit font families and weights
+   * Use `font-display: swap` to prevent render blocking
+   * Self-host critical fonts
+   * Preload critical fonts
+
+3. **CSS**
+   * Extract and inline critical CSS
+   * Remove unused CSS
+   * Minimize CSS framework overhead
+
+### Caching Strategy
+
+1. **Static Assets**
+   * Use long cache TTLs with versioned filenames
+   * Implement service worker for offline assets
+   * Configure appropriate Cache-Control headers
+
+2. **API Responses**
+   * Cache responses where appropriate
+   * Implement stale-while-revalidate pattern
+   * Use ETags and conditional requests
+
+## Monitoring and Measurement
+
+1. **Tools**
+   * Lighthouse for local/CI testing
+   * PageSpeed Insights for production
+   * Web Vitals reporting to analytics
+   * Real User Monitoring (RUM)
+
+2. **Performance Budget CI**
+   * Automated performance testing in CI/CD
+   * Alert on regressions
+   * Block deployment for significant regressions
+
+3. **Regular Audits**
+   * Monthly performance review
+   * Competitor benchmarking
+   * Performance improvement backlog
+
+## Critical Rendering Path Optimization
+
+1. **HTML Delivery**
+   * Minimize document size
+   * Eliminate render-blocking resources
+   * Use preload, prefetch, and preconnect hints
+
+2. **Resource Prioritization**
+   * Critical CSS inlined in `<head>`
+   * Defer non-critical JavaScript
+   * Prioritize LCP image loading
+
+3. **Rendering Sequence**
+   * Optimize order of resource loading
+   * Minimize layout shifts during page load
+   * Prevent long tasks that block interaction
+
+By meeting these performance targets, we ensure a fast, responsive experience that maximizes user engagement and conversion rates.

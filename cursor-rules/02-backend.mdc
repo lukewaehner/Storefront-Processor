@@ -1,0 +1,188 @@
+# Backend Notes
+
+## Tech Stack & Conventions
+
+- **Runtime & Language:** Node.js (v18+) + TypeScript (`"strict": true` in `tsconfig.json`).
+- **Framework:** NestJS (preferred) or Express with `tsyringe` for DI.
+
+  - **NestJS Modules:** group features by domain (Auth, Catalog, Orders, Payments).
+  - **Controllers & Services:** keep controllers thin—delegate business logic to services.
+
+- **API Style:**
+
+  - **GraphQL:** Apollo Server with schema-first or code-first approach.
+  - **REST:** OpenAPI/Swagger for CRUD endpoints; use DTOs and `class-validator` for request validation.
+
+- **ORM & Data Layer:**
+
+  - **Prisma** or **TypeORM** for database modeling, migrations, and type-safe queries.
+  - **Multi-Tenancy:** include `tenantId` on every entity; enforce with middleware or repository patterns.
+
+- **Configuration:**
+
+  - Centralize in `.env` or use **Vault/Secrets Manager**; load via `@nestjs/config` or `dotenv`.
+
+- **Logging:**
+
+  - Use **Pino** or **Winston**; structure logs as JSON for ELK ingestion.
+
+## Security & Best Practices
+
+- **Input Validation & Sanitization:**
+
+  - Validate DTOs with `class-validator`; sanitize strings to prevent injection.
+
+- **SQL Injection Protection:** rely on ORM parameterization; avoid raw queries.
+- **Authentication & Authorization:**
+
+  - JWT with robust secret rotation; guard routes with NestJS `AuthGuard` and custom `RolesGuard`.
+  - Store user roles and `tenantId` in token claims.
+
+- **Web Security:**
+
+  - Apply **Helmet** middleware (HSTS, CSP, XSS filter).
+  - Enforce **CORS** policy, allow only whitelisted origins.
+  - Rate-limit sensitive endpoints (`express-rate-limit`).
+
+- **Error Handling:**
+
+  - Global exception filter to format errors;
+  - Avoid leaking stack traces in production.
+
+- **Dependency Audits & Patching:** run `npm audit` and subscribe to Dependabot alerts.
+- **Secrets Management:** never commit secrets; use environment-based injection.
+- **Data Protection:** encrypt sensitive fields at rest (e.g. user PII).
+
+## Fraud Prevention & Protection
+
+- **Order Screening:**
+
+  - Implement risk scoring system based on order characteristics and customer history.
+  - Flag suspicious orders for manual review based on predefined criteria.
+  - Block orders from known high-risk countries or regions.
+
+- **Account Security:**
+
+  - Enforce rate limiting on login attempts (5 attempts per 15 minutes).
+  - Implement IP-based velocity checks for account creation.
+  - Lock accounts after suspicious activity; notify admin.
+
+- **Payment Verification:**
+
+  - Enforce Address Verification Service (AVS) and CVV checks.
+  - Implement 3D Secure for high-value transactions.
+  - Flag orders with billing/shipping address mismatches.
+
+- **Bot Protection:**
+  - Add CAPTCHA on registration and checkout for anonymous users.
+  - Monitor and block abnormal traffic patterns.
+  - Implement device fingerprinting to detect suspicious clients.
+
+## API Versioning & Evolution
+
+- **Versioning Strategy:**
+
+  - URI path versioning (`/api/v1/products`).
+  - Support at least one previous version for 6 months after deprecation notice.
+  - Version at the resource level, not the entire API.
+
+- **Deprecation Process:**
+
+  - Add `Deprecation` and `Sunset` HTTP headers to responses from deprecated endpoints.
+  - Log usage of deprecated endpoints to prioritize migration support.
+  - Provide migration guides for tenants using deprecated features.
+
+- **Breaking vs. Non-Breaking Changes:**
+  - Breaking: field removal, type changes, required parameter additions.
+  - Non-Breaking: adding optional fields, new endpoints, extended enums.
+  - Communicate breaking changes 3+ months in advance.
+
+---
+
+# Gameplan / Roadmap
+
+1. **Project Initialization**
+
+   - Scaffold via `nest new` or Express boilerplate.
+   - Setup linter (ESLint), formatter (Prettier), Husky + lint-staged.
+
+2. **Database Setup**
+
+   - Choose Prisma/TypeORM; configure connection to PostgreSQL.
+   - Implement multi-tenant strategy (schema or row-based).
+   - Write initial migrations: Tenant, User, Product, Order, Payment models.
+
+3. **Authentication Module**
+
+   - JWT strategy + refresh tokens.
+   - Endpoints: `/auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`.
+   - Guards: `AuthGuard`, `RolesGuard` for RBAC.
+
+4. **Catalog Service**
+
+   - CRUD APIs for products and categories.
+   - Image upload integration (S3) and URL storage.
+
+5. **Order & Cart Service**
+
+   - Cart endpoints: add, remove, view.
+   - Order processing: transactional creation, stock reservation.
+
+6. **Payment Integration**
+
+   - Stripe Connect module: account onboarding, `PaymentIntent` creation with `application_fee_amount`.
+   - Webhook endpoint for `payment_intent.succeeded`, `charge.refunded` (verify signatures).
+
+7. **Background Jobs**
+
+   - Integrate **BullMQ** with Redis.
+   - Jobs: send confirmation emails, export reports, sync inventory.
+
+8. **Webhooks & Event Handling**
+
+   - Central webhook controller; route events to handlers.
+   - Secure with signature verification.
+
+9. **API Documentation**
+
+   - Swagger setup for REST (`@nestjs/swagger`).
+   - GraphQL Playground/Altair for GraphQL schema exploration.
+
+10. **Testing**
+
+    - Unit tests for services and guards (Jest).
+    - Integration tests for controllers and database interactions.
+    - Mock external calls (Stripe, S3) with test doubles.
+
+11. **CI/CD Pipeline**
+
+    - GitHub Actions: lint → test → build Docker image → push → deploy.
+    - Health-check endpoint and smoke tests post-deploy.
+
+12. **Monitoring & Observability**
+
+    - Expose `/metrics` for Prometheus.
+    - Integrate Sentry for runtime error reporting.
+
+13. **Deployment**
+
+    - Write Dockerfile; define Kubernetes manifest or ECS task.
+    - Configure CI to deploy to staging and production clusters.
+
+14. **Performance & Scaling**
+
+    - Enable query caching (Redis).
+    - Implement pagination, rate limits, and connection pools.
+
+15. **Ongoing Security Audits**
+
+    - Schedule periodic security reviews and pen-tests.
+    - Keep dependencies up to date and revalidate CSP, CORS, and rate-limit rules.
+
+16. **Fraud Prevention System**
+
+    - Implement basic risk scoring engine.
+    - Set up order review workflow for flagged transactions.
+    - Configure payment gateway security settings.
+
+---

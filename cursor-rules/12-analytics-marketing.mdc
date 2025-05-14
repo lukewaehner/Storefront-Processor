@@ -1,0 +1,44 @@
+
+<!-- File: 11-Analytics-Marketing-Notes.md -->
+# Analytics & Marketing Notes
+
+## General Conventions
+
+### User Analytics
+- **Platform**: Segment to route events to GA4 / Mixpanel  
+- **Events**:  
+  - `page_view`, `product_view`, `add_to_cart`, `checkout_initiated`, `order_completed`  
+- **User ID**: map authenticated users by `user.id`, guests by anonymous ID  
+- **Dashboard**: build custom reports in Mixpanel / GA4 for funnel analysis
+
+### Error Analytics
+- **Platform**: Sentry (already instrumented for errors)  
+- **Usage**: track release health, error frequency, impacted tenants  
+- **Alerts**: weekly digest of top-5 issues
+
+### A/B Testing
+- **Platform**: Optimizely or Vercel Analytics experiments  
+- **Flow**:  
+  - Define experiment (e.g. “button color test”)  
+  - Serve variant via feature flag (see Feature Flags notes)  
+  - Capture metrics in Segment, analyze conversion lift
+
+---
+
+## Roadmap / To-Do
+
+1. **Segment Integration**  
+   - [ ] Install Segment SDK (frontend & backend if needed)  
+   - [ ] Define and document event taxonomy in `docs/ANALYTICS.md`  
+   - [ ] Pipe events to GA4 and Mixpanel
+
+2. **Dashboard Setup**  
+   - [ ] Create standard dashboards in Mixpanel:  
+     - Acquisition, Activation, Retention  
+     - Revenue & ARPU per tenant  
+   - [ ] Schedule weekly reports via email
+
+3. **A/B Test Framework**  
+   - [ ] Configure Optimizely project and API key  
+   - [ ] Implement experiment enrolment in code behind feature flags  
+   - [ ] Set up analysis dashboards in Vercel Analytics or Optimizely
