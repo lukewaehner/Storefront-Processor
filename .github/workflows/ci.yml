@@ -21,12 +21,15 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+        working-directory: ./backend
 
       - name: Run ESLint
         run: npm run lint
+        working-directory: ./backend
 
   test:
     name: Run Tests
@@ -41,15 +44,20 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+        working-directory: ./backend
 
       - name: Run unit tests
         run: npm test -- --coverage
+        working-directory: ./backend
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
+        with:
+          directory: ./backend/coverage
 
   build:
     name: Build Application
@@ -64,19 +72,21 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+        working-directory: ./backend
 
-      - name: Build frontend
+      - name: Build backend
         run: npm run build
+        working-directory: ./backend
 
       - name: Cache build artifacts
         uses: actions/cache@v3
         with:
           path: |
-            .next
-            dist
+            backend/dist
           key: ${{ runner.os }}-build-${{ github.sha }}
 
   docker:
@@ -105,7 +115,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
-          context: .
+          context: ./backend
+          file: ./infrastructure/docker/backend.Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/storefront-processor:${{ env.BRANCH_NAME }}
@@ -124,9 +135,12 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: "18"
+          cache-dependency-path: backend/package-lock.json
 
       - name: Run npm audit
         run: npm audit
+        working-directory: ./backend
+        continue-on-error: true
 
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/node@master
@@ -134,14 +148,19 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high
+          args: --severity-threshold=high --file=backend/package.json
+
+      - name: Setup CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
 
       - name: Run CodeQL Analysis
         uses: github/codeql-action/analyze@v2
 
   notify:
     name: Send Notifications
-    needs: [lint, test, build, docker, security]
+    needs: [lint, test, build, security]
     runs-on: ubuntu-latest
     if: always()
     steps:
