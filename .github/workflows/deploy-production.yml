@@ -1,0 +1,125 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmDeploy:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        default: ""
+
+jobs:
+  validate:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: ${{ github.event.inputs.confirmDeploy != 'deploy' }}
+        run: |
+          echo "You must type 'deploy' to confirm this production deployment."
+          exit 1
+
+  deploy-approval:
+    name: Production Deployment Approval
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production-approval
+    steps:
+      - name: Approve deployment
+        run: echo "Production deployment has been approved"
+
+  deploy:
+    name: Deploy to Production
+    needs: deploy-approval
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.3.0
+
+      - name: Terraform Init
+        working-directory: ./infrastructure/terraform/production
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./infrastructure/terraform/production
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ./infrastructure/terraform/production
+        run: terraform apply -auto-approve tfplan
+
+      - name: Deploy with Canary Strategy
+        run: |
+          # Step 1: Deploy to 10% of the production fleet
+          aws ecs update-service --cluster storefront-production --service storefront-api --desired-count $(expr $(aws ecs describe-services --cluster storefront-production --services storefront-api --query 'services[0].desiredCount' --output text) / 10)
+          aws ecs update-service --cluster storefront-production --service storefront-frontend --desired-count $(expr $(aws ecs describe-services --cluster storefront-production --services storefront-frontend --query 'services[0].desiredCount' --output text) / 10)
+
+          # Wait for initial deployment to stabilize
+          aws ecs wait services-stable --cluster storefront-production --services storefront-api storefront-frontend
+
+          # Step 2: Verify canary deployment with health checks
+          HEALTH_CHECK_URL="https://api.storefront-processor.com/health"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_CHECK_URL)
+
+          if [ $HTTP_STATUS -ne 200 ]; then
+            echo "Canary deployment health check failed! Rolling back..."
+            # Rollback logic would be here
+            exit 1
+          fi
+
+          # Step 3: Deploy to 100% if canary is healthy
+          aws ecs update-service --cluster storefront-production --service storefront-api --desired-count $(aws ecs describe-services --cluster storefront-production --services storefront-api --query 'services[0].runningCount' --output text)
+          aws ecs update-service --cluster storefront-production --service storefront-frontend --desired-count $(aws ecs describe-services --cluster storefront-production --services storefront-frontend --query 'services[0].runningCount' --output text)
+
+          # Wait for final deployment to stabilize
+          aws ecs wait services-stable --cluster storefront-production --services storefront-api storefront-frontend
+
+      - name: Run Full Health Checks
+        run: |
+          FRONTEND_URL="https://storefront-processor.com"
+          API_URL="https://api.storefront-processor.com/health"
+
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $FRONTEND_URL)
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $API_URL)
+
+          if [ $FRONTEND_STATUS -ne 200 ] || [ $API_STATUS -ne 200 ]; then
+            echo "Health checks failed after full deployment!"
+            echo "Frontend status: $FRONTEND_STATUS"
+            echo "API status: $API_STATUS"
+            exit 1
+          fi
+
+          echo "Production deployment successful!"
+
+      - name: Tag Release
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          VERSION=$(date '+%Y.%m.%d.%H%M')
+          git tag -a "v$VERSION" -m "Production release $VERSION"
+          git push origin "v$VERSION"
+
+      - name: Notify Deployment Status
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: ${{ job.status }}
+          SLACK_TITLE: "Production Deployment ${{ (job.status == 'success') && 'Completed' || 'Failed' }}"
+          SLACK_MESSAGE: "Deployment to production environment has ${{ (job.status == 'success') && 'completed successfully' || 'failed' }}"

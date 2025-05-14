@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- Tenant Models ----
+
+enum TenantStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  DELETED
+}
+
+model Tenant {
+  id              String       @id @default(uuid())
+  name            String
+  slug            String       @unique
+  domains         Domain[]
+  status          TenantStatus @default(ACTIVE)
+  plan            String       @default("starter")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  // Branding and theme information
+  settings        Json?
+  
+  // Relations that support multi-tenancy
+  users           User[]
+  products        Product[]
+  categories      Category[]
+  orders          Order[]
+  
+  @@map("tenants")
+}
+
+model Domain {
+  id        String   @id @default(uuid())
+  domain    String   @unique
+  isPrimary Boolean  @default(false)
+  isCustom  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([domain])
+  @@map("domains")
+}
+
+// ---- User Models ----
+
+enum UserRole {
+  SUPER_ADMIN   // Platform admin
+  ADMIN         // Tenant admin
+  STAFF         // Tenant staff member
+  CUSTOMER      // End customer
+}
+
+model User {
+  id          String    @id @default(uuid())
+  email       String
+  password    String
+  firstName   String?
+  lastName    String?
+  role        UserRole  @default(CUSTOMER)
+  isEmailVerified Boolean @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  
+  // Always add tenantId to the uniqueness constraint for tenant-scoped models
+  @@unique([email, tenantId])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ---- Product Models ----
+
+model Product {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String
+  description String?
+  price       Decimal   @db.Decimal(10, 2)
+  sku         String?
+  inventory   Int       @default(0)
+  isPublished Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Always add tenantId to the uniqueness constraint for tenant-scoped models
+  @@unique([slug, tenantId])
+  @@index([tenantId])
+  @@map("products")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Always add tenantId to the uniqueness constraint for tenant-scoped models
+  @@unique([slug, tenantId])
+  @@index([tenantId])
+  @@map("categories")
+}
+
+// ---- Order Models ----
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  orderNumber   String
+  status        OrderStatus @default(DRAFT)
+  total         Decimal     @db.Decimal(10, 2)
+  tax           Decimal     @db.Decimal(10, 2)
+  shippingCost  Decimal     @db.Decimal(10, 2)
+  customerEmail String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@unique([orderNumber, tenantId])
+  @@index([tenantId])
+  @@map("orders")
+} 
