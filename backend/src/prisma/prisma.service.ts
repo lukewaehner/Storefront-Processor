@@ -1,13 +1,9 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 // Define a type for the extended Prisma client
 // This helps with type safety when using the tenant-specific client
-export type TenantPrismaClient = PrismaClient<
-  Prisma.PrismaClientOptions,
-  never,
-  Prisma.RejectOnNotFound | Prisma.RejectPerOperation | undefined
->;
+export type TenantPrismaClient = PrismaClient;
 
 @Injectable()
 export class PrismaService
@@ -46,7 +42,8 @@ export class PrismaService
     // Models that should not be automatically filtered by tenantId
     const EXCLUDED_MODELS = ["Tenant", "Domain", "User"]; // Assuming User model might have platform admins
 
-    return new PrismaClient({
+    // Create a new client with tenant filtering
+    const client = new PrismaClient({
       datasources: {
         db: {
           url: process.env.DATABASE_URL, // Ensure each tenant client uses the same DB URL
@@ -116,6 +113,8 @@ export class PrismaService
           },
         },
       },
-    }) as TenantPrismaClient;
+    });
+
+    return client as unknown as TenantPrismaClient;
   }
 }
