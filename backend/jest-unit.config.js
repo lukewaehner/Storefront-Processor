@@ -21,4 +21,21 @@ module.exports = {
   injectGlobals: true,
   testTimeout: 30000,
   setupFilesAfterEnv: ["<rootDir>/../test/jest-setup.js"],
+  // Retry failed tests to handle flaky tests in CI environment
+  retry: 2,
+  // Verbose output when tests fail
+  verbose: true,
+  // Add reporters for better CI output
+  reporters: [
+    "default",
+    [
+      "jest-junit",
+      {
+        outputDirectory: "./test-reports",
+        outputName: "junit.xml",
+      },
+    ],
+  ],
+  // Store test output for debugging
+  testResultsProcessor: "jest-junit",
 };

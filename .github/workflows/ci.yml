@@ -127,14 +127,46 @@ jobs:
           BACKEND_PORT=4001
           EOF
 
+      - name: Verify database connection
+        run: |
+          cd ${{ matrix.component }}
+          echo "Verifying database connection..."
+          npx prisma db execute --stdin < <(echo "SELECT 1;") --url postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
+          echo "Database connection successful"
+
       - name: Run prisma generate
         run: cd ${{ matrix.component }} && npx prisma generate
 
-      - name: Run unit tests
-        run: cd ${{ matrix.component }} && npm run test:unit
+      - name: Reset and prepare test database
+        run: |
+          cd ${{ matrix.component }}
+          npx prisma migrate reset --force --skip-seed
+
+      - name: Run unit tests with retries and verbose output
+        id: unit_tests
+        run: |
+          cd ${{ matrix.component }}
+          # First try with regular output
+          npm run test:unit:ci || {
+            echo "::group::Test Failure Details"
+            # If tests fail, run with verbose output for debugging
+            echo "Tests failed, retrying with verbose output for debugging..."
+            NODE_ENV=test npx jest --config jest-unit.config.js --verbose --detectOpenHandles
+            echo "::endgroup::"
+            exit 1
+          }
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: |
+            ${{ matrix.component }}/test-reports
+            ${{ matrix.component }}/.env.test
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
