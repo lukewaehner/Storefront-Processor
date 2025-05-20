@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="37" failures="0" errors="0" time="3.07">
+  <testsuite name="TenantGuard" errors="0" failures="0" skipped="0" timestamp="2025-05-20T15:43:02" time="2.68" tests="7">
+    <testcase classname="TenantGuard should be defined" name="TenantGuard should be defined" time="0.01">
+    </testcase>
+    <testcase classname="TenantGuard canActivate should return true for public routes" name="TenantGuard canActivate should return true for public routes" time="0.002">
+    </testcase>
+    <testcase classname="TenantGuard canActivate should return true for routes with bypass-tenant decorator" name="TenantGuard canActivate should return true for routes with bypass-tenant decorator" time="0.001">
+    </testcase>
+    <testcase classname="TenantGuard canActivate should return true for admin routes" name="TenantGuard canActivate should return true for admin routes" time="0.002">
+    </testcase>
+    <testcase classname="TenantGuard canActivate should throw UnauthorizedException if tenant not found" name="TenantGuard canActivate should throw UnauthorizedException if tenant not found" time="0.007">
+    </testcase>
+    <testcase classname="TenantGuard canActivate should throw UnauthorizedException if tenant status is not ACTIVE" name="TenantGuard canActivate should throw UnauthorizedException if tenant status is not ACTIVE" time="0.001">
+    </testcase>
+    <testcase classname="TenantGuard canActivate should return true if tenant exists and status is ACTIVE" name="TenantGuard canActivate should return true if tenant exists and status is ACTIVE" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="TenantContextService" errors="0" failures="0" skipped="0" timestamp="2025-05-20T15:43:02" time="2.684" tests="12">
+    <testcase classname="TenantContextService should be defined" name="TenantContextService should be defined" time="0.009">
+    </testcase>
+    <testcase classname="TenantContextService getCurrentTenantId should return null when no tenant ID is set" name="TenantContextService getCurrentTenantId should return null when no tenant ID is set" time="0.002">
+    </testcase>
+    <testcase classname="TenantContextService getCurrentTenantId should return the tenant ID when set via run()" name="TenantContextService getCurrentTenantId should return the tenant ID when set via run()" time="0.001">
+    </testcase>
+    <testcase classname="TenantContextService getCurrentTenantId should return the tenant ID when set via runAsync()" name="TenantContextService getCurrentTenantId should return the tenant ID when set via runAsync()" time="0.002">
+    </testcase>
+    <testcase classname="TenantContextService run should execute the callback with tenant ID set in context" name="TenantContextService run should execute the callback with tenant ID set in context" time="0.002">
+    </testcase>
+    <testcase classname="TenantContextService run should return the result of the callback" name="TenantContextService run should return the result of the callback" time="0.001">
+    </testcase>
+    <testcase classname="TenantContextService run should properly restore context after execution" name="TenantContextService run should properly restore context after execution" time="0.001">
+    </testcase>
+    <testcase classname="TenantContextService run should propagate errors from callback" name="TenantContextService run should propagate errors from callback" time="0.005">
+    </testcase>
+    <testcase classname="TenantContextService runAsync should execute the async callback with tenant ID set in context" name="TenantContextService runAsync should execute the async callback with tenant ID set in context" time="0.001">
+    </testcase>
+    <testcase classname="TenantContextService runAsync should return the result of the async callback" name="TenantContextService runAsync should return the result of the async callback" time="0.001">
+    </testcase>
+    <testcase classname="TenantContextService runAsync should properly restore context after execution" name="TenantContextService runAsync should properly restore context after execution" time="0.001">
+    </testcase>
+    <testcase classname="TenantContextService runAsync should propagate errors from async callback" name="TenantContextService runAsync should propagate errors from async callback" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="TenantMiddleware" errors="0" failures="0" skipped="0" timestamp="2025-05-20T15:43:02" time="2.684" tests="5">
+    <testcase classname="TenantMiddleware should be defined" name="TenantMiddleware should be defined" time="0.01">
+    </testcase>
+    <testcase classname="TenantMiddleware use should bypass tenant resolution for admin routes" name="TenantMiddleware use should bypass tenant resolution for admin routes" time="0.003">
+    </testcase>
+    <testcase classname="TenantMiddleware use should resolve tenant by domain and set it in context" name="TenantMiddleware use should resolve tenant by domain and set it in context" time="0.002">
+    </testcase>
+    <testcase classname="TenantMiddleware use should return 404 when tenant not found" name="TenantMiddleware use should return 404 when tenant not found" time="0.002">
+    </testcase>
+    <testcase classname="TenantMiddleware use should pass errors to next middleware" name="TenantMiddleware use should pass errors to next middleware" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="TenantService" errors="0" failures="0" skipped="0" timestamp="2025-05-20T15:43:02" time="2.697" tests="9">
+    <testcase classname="TenantService should be defined" name="TenantService should be defined" time="0.01">
+    </testcase>
+    <testcase classname="TenantService findAll should return all tenants" name="TenantService findAll should return all tenants" time="0.002">
+    </testcase>
+    <testcase classname="TenantService findById should return a tenant when found" name="TenantService findById should return a tenant when found" time="0.002">
+    </testcase>
+    <testcase classname="TenantService findById should throw NotFoundException when tenant not found" name="TenantService findById should throw NotFoundException when tenant not found" time="0.005">
+    </testcase>
+    <testcase classname="TenantService findByDomain should return a tenant when domain is found" name="TenantService findByDomain should return a tenant when domain is found" time="0.002">
+    </testcase>
+    <testcase classname="TenantService findByDomain should return null when domain is not found" name="TenantService findByDomain should return null when domain is not found" time="0.001">
+    </testcase>
+    <testcase classname="TenantService create should create a new tenant with domains" name="TenantService create should create a new tenant with domains" time="0.001">
+    </testcase>
+    <testcase classname="TenantService update should update an existing tenant" name="TenantService update should update an existing tenant" time="0.001">
+    </testcase>
+    <testcase classname="TenantService delete should delete a tenant" name="TenantService delete should delete a tenant" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="PrismaService" errors="0" failures="0" skipped="0" timestamp="2025-05-20T15:43:02" time="2.74" tests="4">
+    <testcase classname="PrismaService should be defined" name="PrismaService should be defined" time="0.011">
+    </testcase>
+    <testcase classname="PrismaService createPrismaForTenant should throw error when tenantId is not provided" name="PrismaService createPrismaForTenant should throw error when tenantId is not provided" time="0.007">
+    </testcase>
+    <testcase classname="PrismaService createPrismaForTenant should return a PrismaClient when valid tenantId is provided" name="PrismaService createPrismaForTenant should return a PrismaClient when valid tenantId is provided" time="0.004">
+    </testcase>
+    <testcase classname="PrismaService createPrismaForTenant should filter queries by tenant ID" name="PrismaService createPrismaForTenant should filter queries by tenant ID" time="0.053">
+    </testcase>
+  </testsuite>
+</testsuites>
