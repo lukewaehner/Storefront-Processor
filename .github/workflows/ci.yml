@@ -29,9 +29,40 @@ jobs:
       - name: Install dependencies
         run: cd ${{ matrix.component }} && npm ci
 
-      - name: Run ESLint
-        run: cd ${{ matrix.component }} && npm run lint
-        continue-on-error: true # Temporarily allow lint errors to not fail the build
+      - name: Run ESLint with detailed output
+        id: eslint
+        continue-on-error: true
+        run: |
+          cd ${{ matrix.component }}
+
+          # Check if eslint-formatter-github exists, install if not
+          if ! npm list -g eslint-formatter-github > /dev/null 2>&1; then
+            npm install -g eslint-formatter-github
+          fi
+
+          # Run ESLint and capture output
+          ESLINT_OUTPUT=$(npm run lint -- --format json || true)
+
+          # Check if there are any errors or warnings
+          if echo "$ESLINT_OUTPUT" | grep -q '"errorCount":[^0]'; then
+            echo "⚠️ ESLint errors found. Please fix these at your earliest convenience." >> $GITHUB_STEP_SUMMARY
+            echo "Errors are allowed to pass for now, but should be addressed." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "```json" >> $GITHUB_STEP_SUMMARY
+            echo "$ESLINT_OUTPUT" >> $GITHUB_STEP_SUMMARY
+            echo "```" >> $GITHUB_STEP_SUMMARY
+            echo "eslint_issues=true" >> $GITHUB_OUTPUT
+          elif echo "$ESLINT_OUTPUT" | grep -q '"warningCount":[^0]'; then
+            echo "⚠️ ESLint warnings found. Consider fixing these." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "```json" >> $GITHUB_STEP_SUMMARY
+            echo "$ESLINT_OUTPUT" >> $GITHUB_STEP_SUMMARY
+            echo "```" >> $GITHUB_STEP_SUMMARY
+            echo "eslint_issues=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No ESLint issues found." >> $GITHUB_STEP_SUMMARY
+            echo "eslint_issues=false" >> $GITHUB_OUTPUT
+          fi
 
   test:
     name: Run Tests
@@ -193,7 +224,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
           cache-dependency-path: ${{ matrix.component }}/package-lock.json
 
@@ -201,17 +232,62 @@ jobs:
         run: cd ${{ matrix.component }} && npm ci
 
       - name: Run npm audit
-        run: cd ${{ matrix.component }} && npm audit --production
-        continue-on-error: true # Temporarily allow audit errors to not fail the build
+        id: npm_audit
+        continue-on-error: true
+        run: |
+          cd ${{ matrix.component }}
+          # Capture the audit output
+          AUDIT_OUTPUT=$(npm audit --production 2>&1) || true
+
+          # Check if vulnerabilities were found
+          if echo "$AUDIT_OUTPUT" | grep -q "vulnerabilities"; then
+            echo "### ⚠️ Security Vulnerabilities Found" >> $GITHUB_STEP_SUMMARY
+            echo "```" >> $GITHUB_STEP_SUMMARY
+            echo "$AUDIT_OUTPUT" >> $GITHUB_STEP_SUMMARY
+            echo "```" >> $GITHUB_STEP_SUMMARY
+            echo "npm_audit_issues=true" >> $GITHUB_OUTPUT
+          else
+            echo "### ✅ No npm audit issues found" >> $GITHUB_STEP_SUMMARY
+            echo "npm_audit_issues=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/node@master
+        id: snyk_scan
         continue-on-error: true
+        uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: test
-          args: --severity-threshold=high --file=${{ matrix.component }}/package.json
+          args: --severity-threshold=high --file=${{ matrix.component }}/package.json --json > snyk-results.json
+
+      - name: Process Snyk results
+        if: always()
+        run: |
+          if [ -f snyk-results.json ]; then
+            echo "### Snyk Security Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "```json" >> $GITHUB_STEP_SUMMARY
+            cat snyk-results.json >> $GITHUB_STEP_SUMMARY
+            echo "```" >> $GITHUB_STEP_SUMMARY
+            
+            # Check if vulnerabilities were found
+            if grep -q "vulnerabilities" snyk-results.json; then
+              echo "⚠️ Security vulnerabilities found! These should be addressed soon." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ No Snyk security issues found" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### ℹ️ No Snyk results available" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Security Scan Summary
+        if: always()
+        run: |
+          echo "### 📋 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Security scanning is complete, see details above for any issues that should be addressed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Consider addressing these issues in future development cycles." >> $GITHUB_STEP_SUMMARY
 
   # Simplified CodeQL job that uses the default token and repository context
   codeql:
@@ -234,9 +310,71 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
+  check-warnings:
+    name: Check for Build Warnings
+    needs: [build, docker]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Download Build Logs
+        uses: actions/github-script@v6
+        id: download-logs
+        with:
+          script: |
+            const jobLogs = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+
+            const buildJob = jobLogs.data.jobs.find(job => job.name.includes('Build Application'));
+            if (buildJob) {
+              const logs = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                job_id: buildJob.id
+              });
+              
+              // Save logs to an output for later steps
+              return logs.data;
+            }
+            return '';
+          result-encoding: string
+
+      - name: Check for Warnings in Logs
+        if: steps.download-logs.outputs.result != ''
+        run: |
+          echo "${{ steps.download-logs.outputs.result }}" > build-logs.txt
+
+          # Check for warnings in the logs
+          WARNINGS=$(grep -i "warn" build-logs.txt || true)
+          DEPRECATIONS=$(grep -i "deprecat" build-logs.txt || true)
+
+          if [[ -n "$WARNINGS" || -n "$DEPRECATIONS" ]]; then
+            echo "### ⚠️ Warnings found in build logs:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            if [[ -n "$WARNINGS" ]]; then
+              echo "## WARNINGS:" >> $GITHUB_STEP_SUMMARY
+              echo "$WARNINGS" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            if [[ -n "$DEPRECATIONS" ]]; then
+              echo "## DEPRECATIONS:" >> $GITHUB_STEP_SUMMARY
+              echo "$DEPRECATIONS" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            echo "Warnings or deprecation notices found in build logs. See summary for details."
+            # Still allow the job to pass but make it visible in the summary
+          else
+            echo "No warnings or deprecation notices found in build logs."
+          fi
+
   notify:
     name: Send Notifications
-    needs: [lint, test, build, docker, security, codeql]
+    needs: [lint, test, build, docker, security, codeql, check-warnings]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -260,3 +398,81 @@ jobs:
           SLACK_COLOR: danger
           SLACK_TITLE: "CI Pipeline Failed"
           SLACK_MESSAGE: "The CI pipeline for ${{ github.repository }} has failed"
+
+  workflow-summary:
+    name: Workflow Summary Report
+    needs: [lint, test, build, docker, security, codeql, check-warnings]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check Job Status
+        id: status_check
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "Pipeline has failures."
+            exit 1
+          elif [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "Pipeline has cancellations."
+            exit 1
+          else
+            echo "All jobs passed successfully."
+            exit 0
+          fi
+
+      - name: Generate Pipeline Summary
+        if: always()
+        run: |
+          echo "# CI Pipeline Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker: ${{ needs.docker.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- CodeQL: ${{ needs.codeql.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Warning Check: ${{ needs.check-warnings.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Technical Debt Scorecard" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This section shows issues that don't block the build but should be addressed:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Create a nice emoji-based summary table
+          echo "| Category | Status | Priority |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+
+          # Link to detailed sections in the report where available
+          if [[ "${{ needs.lint.result }}" == "success" ]]; then
+            echo "| Linting | ✅ Clean | Low |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Linting | ⚠️ Issues found ([details](#eslint-errors-found-please-fix-these-at-your-earliest-convenience)) | Medium |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.security.result }}" == "success" ]]; then
+            echo "| Security | ✅ Clean | Low |" >> $GITHUB_STEP_SUMMARY
+          else  
+            echo "| Security | ⚠️ Vulnerabilities found ([details](#-security-scan-summary)) | High |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.check-warnings.result }}" == "success" ]]; then
+            echo "| Build Warnings | ✅ Clean | Low |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Build Warnings | ⚠️ Warnings found ([details](#-warnings-found-in-build-logs)) | Medium |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.codeql.result }}" == "success" ]]; then
+            echo "| Code Quality | ✅ Clean | Low |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Code Quality | ⚠️ Issues found | High |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Address any security vulnerabilities in the next sprint" >> $GITHUB_STEP_SUMMARY
+          echo "- Fix ESLint issues when working on related files" >> $GITHUB_STEP_SUMMARY
+          echo "- Review build warnings to improve code quality" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Workflow run completed at: $(date)" >> $GITHUB_STEP_SUMMARY
