@@ -31,10 +31,10 @@
     "prisma:seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "dependencies": {
-    "@nestjs/common": "^10.4.17",
-    "@nestjs/config": "^3.1.1",
+    "@nestjs/common": "^11.1.1",
+    "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.1.1",
-    "@nestjs/jwt": "^10.1.1",
+    "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.1.1",
     "@prisma/client": "^6.7.0",
     "bcrypt": "^5.1.1",
@@ -44,9 +44,9 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
-    "@nestjs/cli": "^10.1.18",
-    "@nestjs/mapped-types": "^2.1.0",
-    "@nestjs/schematics": "^10.0.2",
+    "@nestjs/cli": "^11.1.1",
+    "@nestjs/mapped-types": "^3.0.0",
+    "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.1.1",
     "@types/bcrypt": "^5.0.1",
     "@types/cookie-parser": "^1.4.5",
