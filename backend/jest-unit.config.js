@@ -4,7 +4,16 @@ export default {
   rootDir: "src", // Look for source files in src
   testRegex: ".*\\.spec\\.ts$", // Match .spec.ts files
   transform: {
-    "^.+\\.(t|j)s$": "ts-jest",
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      {
+        useESM: true,
+      },
+    ],
+  },
+  extensionsToTreatAsEsm: [".ts"],
+  moduleNameMapper: {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   collectCoverageFrom: [
     "**/*.(t|j)s",
@@ -21,9 +30,10 @@ export default {
   globals: {
     "ts-jest": {
       tsconfig: "<rootDir>/../tsconfig.json",
-      isolatedModules: true,
+      useESM: true,
     },
   },
+  injectGlobals: true,
   forceExit: true,
   detectOpenHandles: true,
 };

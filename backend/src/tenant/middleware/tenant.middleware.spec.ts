@@ -1,10 +1,11 @@
+import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { Test, TestingModule } from "@nestjs/testing";
 import { TenantMiddleware } from "./tenant.middleware";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TenantService } from "../services/tenant.service";
 import { TenantContextService } from "../services/tenant-context.service";
 import { ConfigModule } from "@nestjs/config";
-import { getPrismaTestClient } from "../../../test/utils/db-test-utils";
+import { getPrismaTestClient } from "../../../test/utils/db-test-utils.js";
 
 describe("TenantMiddleware", () => {
   let middleware: TenantMiddleware;

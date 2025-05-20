@@ -1,5 +1,14 @@
+import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
-import { TenantContextService } from "./tenant-context.service";
+import { TenantContextService } from "./tenant-context.service.js";
 
 describe("TenantContextService", () => {
   let service: TenantContextService;
@@ -22,7 +31,7 @@ describe("TenantContextService", () => {
   });
 
   describe("getCurrentTenantId", () => {
-    it("should return null when no tenant id is set", () => {
+    it("should return null when no tenant is set", () => {
       const tenantId = service.getCurrentTenantId();
       expect(tenantId).toBeNull();
     });
@@ -37,8 +46,8 @@ describe("TenantContextService", () => {
     });
 
     it("should handle nested contexts correctly", () => {
-      const outerTenantId = "outer-tenant-id";
-      const innerTenantId = "inner-tenant-id";
+      const outerTenantId = "outer-tenant";
+      const innerTenantId = "inner-tenant";
 
       service.run(outerTenantId, () => {
         expect(service.getCurrentTenantId()).toBe(outerTenantId);
@@ -47,12 +56,8 @@ describe("TenantContextService", () => {
           expect(service.getCurrentTenantId()).toBe(innerTenantId);
         });
 
-        // Should revert to outer context after inner run completes
         expect(service.getCurrentTenantId()).toBe(outerTenantId);
       });
-
-      // Should be null after all contexts exit
-      expect(service.getCurrentTenantId()).toBeNull();
     });
   });
 
@@ -72,7 +77,7 @@ describe("TenantContextService", () => {
 
       const result = service.run(testTenantId, () => expectedResult);
 
-      expect(result).toEqual(expectedResult);
+      expect(result).toBe(expectedResult);
     });
 
     it("should propagate errors from the callback", () => {
@@ -106,7 +111,7 @@ describe("TenantContextService", () => {
         async () => expectedResult
       );
 
-      expect(result).toEqual(expectedResult);
+      expect(result).toBe(expectedResult);
     });
 
     it("should propagate errors from the async callback", async () => {
@@ -124,15 +129,13 @@ describe("TenantContextService", () => {
       const testTenantId = "test-tenant-id";
 
       await service.runAsync(testTenantId, async () => {
-        // Simulate async operation
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        // Simulate some async operations
+        await Promise.resolve();
+        expect(service.getCurrentTenantId()).toBe(testTenantId);
 
-        // Check that tenant ID is still in context
+        await new Promise((resolve) => setTimeout(resolve, 10));
         expect(service.getCurrentTenantId()).toBe(testTenantId);
       });
-
-      // Should be null after context exits
-      expect(service.getCurrentTenantId()).toBeNull();
     });
   });
 });

@@ -1,8 +1,9 @@
+import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { Test, TestingModule } from "@nestjs/testing";
 import { TenantService } from "./tenant.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ConfigModule } from "@nestjs/config";
-import { getPrismaTestClient } from "../../../test/utils/db-test-utils";
+import { getPrismaTestClient } from "../../../test/utils/db-test-utils.js";
 import { TenantStatus } from "../dto/create-tenant.dto";
 import { NotFoundException } from "@nestjs/common";
 

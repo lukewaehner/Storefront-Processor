@@ -2,10 +2,11 @@ import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 import * as path from "path";
-import { getDirname } from "../../src/utils/esm-paths.js";
+import { fileURLToPath } from "url";
 
-// Get ESM-compatible __dirname
-const __dirname = getDirname(import.meta.url);
+// Get the directory name in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load .env.test variables
 dotenv.config({ path: path.resolve(__dirname, "../../.env.test") });
@@ -21,9 +22,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Singleton PrismaClient for test utilities if needed for seeding later
-let prismaTestClient: PrismaClient | null = null;
+let prismaTestClient = null;
 
-export const getPrismaTestClient = (): PrismaClient => {
+const getPrismaTestClient = () => {
   if (!prismaTestClient) {
     prismaTestClient = new PrismaClient({
       datasources: {
@@ -40,7 +41,7 @@ export const getPrismaTestClient = (): PrismaClient => {
  * Resets the test database to a clean state by running the
  * prisma:migrate:test:setup npm script.
  */
-export const resetTestDatabase = () => {
+const resetTestDatabase = () => {
   console.log("Resetting test database...");
   try {
     // Ensure NODE_ENV is test for the child process as well
@@ -62,12 +63,15 @@ export const resetTestDatabase = () => {
  * Disconnects the prismaTestClient if it was initialized.
  * Call this in a global afterAll hook in your Jest setup.
  */
-export const disconnectPrismaTestClient = async () => {
+const disconnectPrismaTestClient = async () => {
   if (prismaTestClient) {
     await prismaTestClient.$disconnect();
     prismaTestClient = null;
   }
 };
+
+// Export all functions as named exports for ES Modules
+export { getPrismaTestClient, resetTestDatabase, disconnectPrismaTestClient };
 
 // Example of how you might seed specific data (can be expanded)
 // export const seedTestData = async () => {

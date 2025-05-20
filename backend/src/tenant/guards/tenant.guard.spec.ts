@@ -1,3 +1,4 @@
+import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { TenantGuard } from "./tenant.guard";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";

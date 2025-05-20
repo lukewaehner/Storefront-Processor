@@ -18,6 +18,7 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "esModuleInterop": true,
+    "isolatedModules": true,
     "lib": ["es2018", "dom"]
   }
 }

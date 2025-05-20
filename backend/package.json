@@ -20,7 +20,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:unit": "NODE_ENV=test jest --config jest-unit.config.js",
+    "test:unit": "NODE_ENV=test node --experimental-vm-modules node_modules/.bin/jest --config jest-unit.config.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -43,6 +43,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@nestjs/cli": "^10.1.18",
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/schematics": "^10.0.2",
