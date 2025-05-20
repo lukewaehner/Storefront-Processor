@@ -3,123 +3,139 @@ name: Deploy to Production
 on:
   workflow_dispatch:
     inputs:
-      confirmDeploy:
-        description: 'Type "deploy" to confirm production deployment'
+      confirm:
+        description: 'Type "deploy-production" to confirm deployment'
         required: true
-        default: ""
+  push:
+    tags:
+      - "v*"
 
 jobs:
   validate:
-    name: Validate Deployment Request
+    name: Validate Deployment
     runs-on: ubuntu-latest
     steps:
-      - name: Check confirmation
-        if: ${{ github.event.inputs.confirmDeploy != 'deploy' }}
+      - name: Check Tag or Confirmation
+        id: validate
         run: |
-          echo "You must type 'deploy' to confirm this production deployment."
-          exit 1
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.confirm }}" != "deploy-production" ]]; then
+            echo "Deployment confirmation text did not match. Expected 'deploy-production'."
+            exit 1
+          fi
 
-  deploy-approval:
-    name: Production Deployment Approval
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "Deploying from tag: ${{ github.ref }}"
+          else
+            echo "Deploying from manual trigger"
+          fi
+
+  build:
+    name: Build Production Artifacts
     needs: validate
     runs-on: ubuntu-latest
-    environment: production-approval
+    strategy:
+      matrix:
+        component: [backend, frontend]
     steps:
-      - name: Approve deployment
-        run: echo "Production deployment has been approved"
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.component }}/package-lock.json
+
+      - name: Install dependencies
+        run: cd ${{ matrix.component }} && npm ci
+
+      - name: Build
+        run: cd ${{ matrix.component }} && npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.component }}-build
+          path: |
+            ${{ matrix.component == 'frontend' && 'frontend/.next' || 'backend/dist' }}
+            ${{ matrix.component }}/package.json
+            ${{ matrix.component }}/package-lock.json
+            ${{ matrix.component == 'backend' && 'backend/prisma' || '' }}
 
   deploy:
     name: Deploy to Production
-    needs: deploy-approval
+    needs: build
     runs-on: ubuntu-latest
-    environment: production
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-west-2
+          path: artifacts
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.4
         with:
-          terraform_version: 1.3.0
+          ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
 
-      - name: Terraform Init
-        working-directory: ./infrastructure/terraform/production
-        run: terraform init
-
-      - name: Terraform Plan
-        working-directory: ./infrastructure/terraform/production
-        run: terraform plan -out=tfplan
-
-      - name: Terraform Apply
-        working-directory: ./infrastructure/terraform/production
-        run: terraform apply -auto-approve tfplan
-
-      - name: Deploy with Canary Strategy
+      - name: Setup known_hosts
         run: |
-          # Step 1: Deploy to 10% of the production fleet
-          aws ecs update-service --cluster storefront-production --service storefront-api --desired-count $(expr $(aws ecs describe-services --cluster storefront-production --services storefront-api --query 'services[0].desiredCount' --output text) / 10)
-          aws ecs update-service --cluster storefront-production --service storefront-frontend --desired-count $(expr $(aws ecs describe-services --cluster storefront-production --services storefront-frontend --query 'services[0].desiredCount' --output text) / 10)
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.PRODUCTION_SERVER_IP }} >> ~/.ssh/known_hosts
 
-          # Wait for initial deployment to stabilize
-          aws ecs wait services-stable --cluster storefront-production --services storefront-api storefront-frontend
-
-          # Step 2: Verify canary deployment with health checks
-          HEALTH_CHECK_URL="https://api.storefront-processor.com/health"
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_CHECK_URL)
-
-          if [ $HTTP_STATUS -ne 200 ]; then
-            echo "Canary deployment health check failed! Rolling back..."
-            # Rollback logic would be here
-            exit 1
-          fi
-
-          # Step 3: Deploy to 100% if canary is healthy
-          aws ecs update-service --cluster storefront-production --service storefront-api --desired-count $(aws ecs describe-services --cluster storefront-production --services storefront-api --query 'services[0].runningCount' --output text)
-          aws ecs update-service --cluster storefront-production --service storefront-frontend --desired-count $(aws ecs describe-services --cluster storefront-production --services storefront-frontend --query 'services[0].runningCount' --output text)
-
-          # Wait for final deployment to stabilize
-          aws ecs wait services-stable --cluster storefront-production --services storefront-api storefront-frontend
-
-      - name: Run Full Health Checks
+      - name: Prepare deployment files
         run: |
-          FRONTEND_URL="https://storefront-processor.com"
-          API_URL="https://api.storefront-processor.com/health"
+          # Create a temporary deployment directory
+          mkdir -p deploy
 
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $FRONTEND_URL)
-          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $API_URL)
+          # Copy build artifacts to deployment directory
+          cp -r artifacts/backend-build/* deploy/backend/
+          cp -r artifacts/frontend-build/* deploy/frontend/
 
-          if [ $FRONTEND_STATUS -ne 200 ] || [ $API_STATUS -ne 200 ]; then
-            echo "Health checks failed after full deployment!"
-            echo "Frontend status: $FRONTEND_STATUS"
-            echo "API status: $API_STATUS"
-            exit 1
-          fi
+          # Copy deployment scripts
+          cp infrastructure/deploy/production/* deploy/
+          chmod +x deploy/*.sh
 
-          echo "Production deployment successful!"
-
-      - name: Tag Release
+      - name: Transfer files to production server
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          VERSION=$(date '+%Y.%m.%d.%H%M')
-          git tag -a "v$VERSION" -m "Production release $VERSION"
-          git push origin "v$VERSION"
+          # Create a compressed archive
+          tar -czf deploy.tar.gz -C deploy .
 
-      - name: Notify Deployment Status
+          # Transfer to server
+          scp deploy.tar.gz ${{ secrets.PRODUCTION_SERVER_USER }}@${{ secrets.PRODUCTION_SERVER_IP }}:/tmp/
+
+      - name: Execute deployment script
+        run: |
+          ssh ${{ secrets.PRODUCTION_SERVER_USER }}@${{ secrets.PRODUCTION_SERVER_IP }} "
+            mkdir -p ~/deployment
+            tar -xzf /tmp/deploy.tar.gz -C ~/deployment
+            cd ~/deployment
+            ./deploy.sh
+          "
+
+  notify:
+    name: Send Deployment Notifications
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify on Success
+        if: ${{ success() }}
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_COLOR: ${{ job.status }}
-          SLACK_TITLE: "Production Deployment ${{ (job.status == 'success') && 'Completed' || 'Failed' }}"
-          SLACK_MESSAGE: "Deployment to production environment has ${{ (job.status == 'success') && 'completed successfully' || 'failed' }}"
+          SLACK_COLOR: good
+          SLACK_TITLE: "Production Deployment Successful"
+          SLACK_MESSAGE: "The application has been successfully deployed to production."
+
+      - name: Notify on Failure
+        if: ${{ failure() }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: danger
+          SLACK_TITLE: "Production Deployment Failed"
+          SLACK_MESSAGE: "The production deployment has failed. Please check the GitHub Actions logs."

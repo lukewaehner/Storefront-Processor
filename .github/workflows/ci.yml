@@ -160,19 +160,23 @@ jobs:
           command: test
           args: --severity-threshold=high --file=${{ matrix.component }}/package.json
 
+  # Simplified CodeQL job that uses the default token and repository context
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     permissions:
+      # Required for CodeQL analysis
       security-events: write
+      contents: read
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
+        # Using default GITHUB_TOKEN and no custom repository settings
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2
         with:
-          languages: javascript
+          languages: javascript, typescript
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
