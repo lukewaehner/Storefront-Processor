@@ -3,6 +3,8 @@
   "compilerOptions": {
     "noImplicitAny": false,
     "strictNullChecks": false,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "checkJs": false
   },
   "include": ["src/**/*.spec.ts", "test/**/*.ts"],

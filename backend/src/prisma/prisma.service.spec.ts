@@ -1,8 +1,18 @@
-import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+/// <reference types="jest" />
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
-import { PrismaService } from "./prisma.service.js";
+import { PrismaService } from "./prisma.service";
 import { ConfigModule } from "@nestjs/config";
-import { getPrismaTestClient } from "../../test/utils/db-test-utils.js";
+import { getPrismaTestClient } from "../../test/utils/db-test-utils";
 
 describe("PrismaService", () => {
   let service: PrismaService;

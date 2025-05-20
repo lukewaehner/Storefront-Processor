@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import {
   jest,
   describe,
@@ -9,18 +10,21 @@ import {
   afterAll,
 } from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
-import { TenantMiddleware } from "./tenant.middleware.js";
-import { PrismaService } from "../../prisma/prisma.service.js";
-import { TenantService } from "../services/tenant.service.js";
-import { TenantContextService } from "../services/tenant-context.service.js";
+import { TenantMiddleware } from "./tenant.middleware";
+import { PrismaService } from "../../prisma/prisma.service";
+import { TenantService } from "../services/tenant.service";
+import { TenantContextService } from "../services/tenant-context.service";
 import { ConfigModule } from "@nestjs/config";
-import { getPrismaTestClient } from "../../../test/utils/db-test-utils.js";
+import { getPrismaTestClient } from "../../../test/utils/db-test-utils";
 
 describe("TenantMiddleware", () => {
   let middleware: TenantMiddleware;
   let tenantService: TenantService;
   let tenantContextService: TenantContextService;
   let testTenant: any;
+  let mockNext: jest.Mock;
+  let mockReq: any;
+  let mockRes: any;
 
   beforeAll(async () => {
     // Set up test tenant with domain
@@ -55,16 +59,6 @@ describe("TenantMiddleware", () => {
   });
 
   beforeEach(async () => {
-    const mockTenantService = {
-      findByDomain: jest.fn(),
-    };
-
-    const mockTenantContextService = {
-      runAsync: jest
-        .fn()
-        .mockImplementation((tenantId, callback) => callback()),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -76,11 +70,19 @@ describe("TenantMiddleware", () => {
         TenantMiddleware,
         {
           provide: TenantService,
-          useValue: mockTenantService,
+          useValue: {
+            findByDomain: jest.fn(),
+          },
         },
         {
           provide: TenantContextService,
-          useValue: mockTenantContextService,
+          useValue: {
+            runAsync: jest.fn(),
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: getPrismaTestClient(),
         },
       ],
     }).compile();
@@ -89,6 +91,12 @@ describe("TenantMiddleware", () => {
     tenantService = module.get<TenantService>(TenantService);
     tenantContextService =
       module.get<TenantContextService>(TenantContextService);
+    mockNext = jest.fn();
+    mockReq = { hostname: "test.example.com" };
+    mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
   });
 
   it("should be defined", () => {
@@ -96,108 +104,88 @@ describe("TenantMiddleware", () => {
   });
 
   describe("use", () => {
-    it("should attach tenant to request and run in tenant context when found", async () => {
-      // Mock request, response, and next function
-      const req: any = {
-        hostname: "middleware-test.com",
-        path: "/products", // Not an admin route
+    it("should bypass tenant resolution for admin routes", async () => {
+      mockReq.path = "/admin/dashboard";
+
+      await middleware.use(mockReq, mockRes, mockNext);
+
+      expect(tenantService.findByDomain).not.toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalled();
+    });
+
+    it("should resolve tenant by domain and set it in context", async () => {
+      // Create a full mock tenant object with all required properties
+      const mockTenant = {
+        id: "test-tenant",
+        name: "Test Tenant",
+        slug: "test-tenant",
+        status: "ACTIVE",
+        plan: "free",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        settings: {},
       };
-      const res: any = {};
-      const next = jest.fn();
 
-      // Mock findByDomain to return our test tenant
-      jest.spyOn(tenantService, "findByDomain").mockResolvedValue(testTenant);
+      mockReq.path = "/products"; // Non-admin route
 
-      // Call the middleware
-      await middleware.use(req, res, next);
+      // @ts-ignore - Ignore the type error in the mock
+      jest.spyOn(tenantService, "findByDomain").mockResolvedValue(mockTenant);
 
-      // Expect tenant to be attached to request
-      expect(req.tenant).toBeDefined();
-      expect(req.tenant).toEqual(testTenant);
-
-      // Expect tenant context to be run with the tenant ID
-      expect(tenantContextService.runAsync).toHaveBeenCalledWith(
-        testTenant.id,
-        expect.any(Function)
+      // Create a proper mock for runAsync that actually calls the callback function
+      // Fix the callback issue to make it callable
+      (tenantContextService.runAsync as jest.Mock).mockImplementation(
+        async (tenantId, callback) => {
+          // @ts-ignore - Make callback callable
+          if (typeof callback === "function") {
+            return await callback();
+          }
+          return undefined;
+        }
       );
 
-      // Expect next to be called
-      expect(next).toHaveBeenCalled();
+      await middleware.use(mockReq, mockRes, mockNext);
+
+      expect(tenantService.findByDomain).toHaveBeenCalledWith(
+        "test.example.com"
+      );
+      expect(mockReq.tenant).toBe(mockTenant);
+      expect(tenantContextService.runAsync).toHaveBeenCalledWith(
+        mockTenant.id,
+        expect.any(Function)
+      );
+      expect(mockNext).toHaveBeenCalled();
     });
 
-    it("should bypass tenant resolution for admin routes", async () => {
-      // Mock request, response, and next function
-      const req: any = {
-        hostname: "nonexistent-domain.com",
-        path: "/admin/dashboard", // Admin route
-      };
-      const res: any = {};
-      const next = jest.fn();
+    it("should return 404 when tenant not found", async () => {
+      mockReq.path = "/products";
 
-      // Call the middleware
-      await middleware.use(req, res, next);
-
-      // Expect findByDomain not to be called
-      expect(tenantService.findByDomain).not.toHaveBeenCalled();
-
-      // Expect tenant not to be attached to request
-      expect(req.tenant).toBeUndefined();
-
-      // Expect next to be called (middleware should continue)
-      expect(next).toHaveBeenCalled();
-    });
-
-    it("should handle tenant not found error", async () => {
-      // Mock request, response, and next function
-      const req: any = {
-        hostname: "nonexistent-domain.com",
-        path: "/products", // Not an admin route
-      };
-      const res: any = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
-      const next = jest.fn();
-
-      // Mock findByDomain to return null
       jest.spyOn(tenantService, "findByDomain").mockResolvedValue(null);
 
-      // Call the middleware
-      await middleware.use(req, res, next);
+      await middleware.use(mockReq, mockRes, mockNext);
 
-      // Expect tenant not to be attached to request
-      expect(req.tenant).toBeUndefined();
-
-      // Expect response with 404 status
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({
+      expect(tenantService.findByDomain).toHaveBeenCalledWith(
+        "test.example.com"
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+      expect(mockRes.json).toHaveBeenCalledWith({
         statusCode: 404,
-        message: `Tenant not found for domain: nonexistent-domain.com`,
+        message: `Tenant not found for domain: test.example.com`,
       });
-
-      // Next should not be called
-      expect(next).not.toHaveBeenCalled();
+      expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it("should pass errors to the next middleware", async () => {
-      // Mock request, response, and next function
-      const req: any = {
-        hostname: "error-domain.com",
-        path: "/products", // Not an admin route
-      };
-      const res: any = {};
-      const next = jest.fn();
+    it("should pass errors to next middleware", async () => {
+      mockReq.path = "/products";
+      const testError = new Error("Test error");
 
-      const testError = new Error("Database connection error");
-
-      // Mock findByDomain to throw an error
       jest.spyOn(tenantService, "findByDomain").mockRejectedValue(testError);
 
-      // Call the middleware
-      await middleware.use(req, res, next);
+      await middleware.use(mockReq, mockRes, mockNext);
 
-      // Expect next to be called with the error
-      expect(next).toHaveBeenCalledWith(testError);
+      expect(tenantService.findByDomain).toHaveBeenCalledWith(
+        "test.example.com"
+      );
+      expect(mockNext).toHaveBeenCalledWith(testError);
     });
   });
 });

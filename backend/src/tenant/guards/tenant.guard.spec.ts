@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import {
   jest,
   describe,
@@ -8,12 +9,12 @@ import {
   beforeAll,
   afterAll,
 } from "@jest/globals";
-import { TenantGuard } from "./tenant.guard.js";
+import { TenantGuard } from "./tenant.guard";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Test, TestingModule } from "@nestjs/testing";
-import { IS_PUBLIC_KEY } from "../../auth/decorators/public.decorator.js";
-import { BYPASS_TENANT_KEY } from "../decorators/bypass-tenant.decorator.js";
+import { IS_PUBLIC_KEY } from "../../auth/decorators/public.decorator";
+import { BYPASS_TENANT_KEY } from "../decorators/bypass-tenant.decorator";
 
 describe("TenantGuard", () => {
   let guard: TenantGuard;
@@ -41,92 +42,136 @@ describe("TenantGuard", () => {
   });
 
   describe("canActivate", () => {
-    let mockContext: ExecutionContext;
+    it("should return true for public routes", () => {
+      // Mock the reflector to say route is public
+      jest.spyOn(reflector, "getAllAndOverride").mockReturnValueOnce(true);
 
-    beforeEach(() => {
-      // Create a mock execution context
-      mockContext = {
-        switchToHttp: jest.fn().mockReturnValue({
-          getRequest: jest.fn().mockReturnValue({ path: "/products" }), // Default non-admin path
-        }),
+      const mockContext = {
         getHandler: jest.fn(),
         getClass: jest.fn(),
+        switchToHttp: jest.fn().mockReturnValue({
+          getRequest: jest.fn().mockReturnValue({}),
+        }),
       } as unknown as ExecutionContext;
+
+      const result = guard.canActivate(mockContext);
+      expect(result).toBe(true);
+      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(IS_PUBLIC_KEY, [
+        mockContext.getHandler(),
+        mockContext.getClass(),
+      ]);
     });
 
-    it("should allow access if route is admin path", () => {
-      // Setup request with admin path
-      const req = { path: "/admin/dashboard" };
-      mockContext.switchToHttp().getRequest = jest.fn().mockReturnValue(req);
+    it("should return true for routes with bypass-tenant decorator", () => {
+      // First call for IS_PUBLIC_KEY returns false
+      // Second call for BYPASS_TENANT_KEY returns true
+      jest
+        .spyOn(reflector, "getAllAndOverride")
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true);
+
+      const mockContext = {
+        getHandler: jest.fn(),
+        getClass: jest.fn(),
+        switchToHttp: jest.fn().mockReturnValue({
+          getRequest: jest.fn(),
+        }),
+      } as unknown as ExecutionContext;
 
       const result = guard.canActivate(mockContext);
       expect(result).toBe(true);
     });
 
-    it("should allow access if route is marked as public", () => {
-      // Setup reflector to return true for IS_PUBLIC_KEY
-      jest.spyOn(reflector, "getAllAndOverride").mockImplementation((key) => {
-        if (key === IS_PUBLIC_KEY) return true;
-        return false;
-      });
+    it("should return true for admin routes", () => {
+      // Both decorator checks return false
+      jest
+        .spyOn(reflector, "getAllAndOverride")
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      const req = { path: "/admin/users" };
+      const mockContext = {
+        getHandler: jest.fn(),
+        getClass: jest.fn(),
+        switchToHttp: jest.fn().mockReturnValue({
+          // @ts-ignore - Type mismatch in test mocks
+          getRequest: jest.fn().mockReturnValue(req),
+        }),
+      } as unknown as ExecutionContext;
 
       const result = guard.canActivate(mockContext);
       expect(result).toBe(true);
     });
 
-    it("should allow access if route bypasses tenant check", () => {
-      // Setup reflector to return true for BYPASS_TENANT_KEY
-      jest.spyOn(reflector, "getAllAndOverride").mockImplementation((key) => {
-        if (key === BYPASS_TENANT_KEY) return true;
-        return false;
-      });
+    it("should throw UnauthorizedException if tenant not found", () => {
+      // Both decorator checks return false
+      jest
+        .spyOn(reflector, "getAllAndOverride")
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
 
-      const result = guard.canActivate(mockContext);
-      expect(result).toBe(true);
-    });
-
-    it("should allow access if tenant is in request", () => {
-      // Setup reflector to return false for both keys
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-
-      // Setup request with tenant
-      const req = {
-        path: "/products",
-        tenant: { id: "tenant-id", status: "ACTIVE" },
-      };
-      mockContext.switchToHttp().getRequest = jest.fn().mockReturnValue(req);
-
-      const result = guard.canActivate(mockContext);
-      expect(result).toBe(true);
-    });
-
-    it("should deny access if tenant is not in request", () => {
-      // Setup reflector to return false for both keys
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-
-      // Setup request without tenant
-      const req = { path: "/products" };
-      mockContext.switchToHttp().getRequest = jest.fn().mockReturnValue(req);
+      const req = { path: "/products" }; // Not an admin route
+      const mockContext = {
+        getHandler: jest.fn(),
+        getClass: jest.fn(),
+        switchToHttp: jest.fn().mockReturnValue({
+          // @ts-ignore - Type mismatch in test mocks
+          getRequest: jest.fn().mockReturnValue(req),
+        }),
+      } as unknown as ExecutionContext;
 
       expect(() => guard.canActivate(mockContext)).toThrow(
         UnauthorizedException
       );
     });
 
-    it("should deny access if tenant is not active", () => {
-      // Setup reflector to return false for both keys
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    it("should throw UnauthorizedException if tenant status is not ACTIVE", () => {
+      // Both decorator checks return false
+      jest
+        .spyOn(reflector, "getAllAndOverride")
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
 
-      // Setup request with inactive tenant
       const req = {
         path: "/products",
-        tenant: { id: "tenant-id", status: "INACTIVE" },
+        tenant: { status: "SUSPENDED" },
       };
-      mockContext.switchToHttp().getRequest = jest.fn().mockReturnValue(req);
+      const mockContext = {
+        getHandler: jest.fn(),
+        getClass: jest.fn(),
+        switchToHttp: jest.fn().mockReturnValue({
+          // @ts-ignore - Type mismatch in test mocks
+          getRequest: jest.fn().mockReturnValue(req),
+        }),
+      } as unknown as ExecutionContext;
 
       expect(() => guard.canActivate(mockContext)).toThrow(
         UnauthorizedException
       );
+    });
+
+    it("should return true if tenant exists and status is ACTIVE", () => {
+      // Both decorator checks return false
+      jest
+        .spyOn(reflector, "getAllAndOverride")
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      const req = {
+        path: "/products",
+        tenant: { status: "ACTIVE" },
+      };
+      const mockContext = {
+        getHandler: jest.fn(),
+        getClass: jest.fn(),
+        switchToHttp: jest.fn().mockReturnValue({
+          // @ts-ignore - Type mismatch in test mocks
+          getRequest: jest.fn().mockReturnValue(req),
+        }),
+      } as unknown as ExecutionContext;
+
+      const result = guard.canActivate(mockContext);
+      expect(result).toBe(true);
     });
   });
 });

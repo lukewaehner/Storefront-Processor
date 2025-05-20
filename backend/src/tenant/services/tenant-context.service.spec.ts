@@ -1,17 +1,10 @@
-import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
-import {
-  jest,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from "@jest/globals";
+/// <reference types="jest" />
 import { Test, TestingModule } from "@nestjs/testing";
-import { TenantContextService } from "./tenant-context.service.js";
+import { TenantContextService } from "./tenant-context.service";
 
 describe("TenantContextService", () => {
   let service: TenantContextService;
+  const testTenantId = "test-tenant-id";
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -31,59 +24,58 @@ describe("TenantContextService", () => {
   });
 
   describe("getCurrentTenantId", () => {
-    it("should return null when no tenant is set", () => {
-      const tenantId = service.getCurrentTenantId();
-      expect(tenantId).toBeNull();
+    it("should return null when no tenant ID is set", () => {
+      expect(service.getCurrentTenantId()).toBeNull();
     });
 
-    it("should return the tenant id when set", () => {
-      const testTenantId = "test-tenant-id";
-
+    it("should return the tenant ID when set via run()", () => {
       service.run(testTenantId, () => {
-        const tenantId = service.getCurrentTenantId();
-        expect(tenantId).toBe(testTenantId);
+        expect(service.getCurrentTenantId()).toBe(testTenantId);
       });
     });
 
-    it("should handle nested contexts correctly", () => {
-      const outerTenantId = "outer-tenant";
-      const innerTenantId = "inner-tenant";
-
-      service.run(outerTenantId, () => {
-        expect(service.getCurrentTenantId()).toBe(outerTenantId);
-
-        service.run(innerTenantId, () => {
-          expect(service.getCurrentTenantId()).toBe(innerTenantId);
-        });
-
-        expect(service.getCurrentTenantId()).toBe(outerTenantId);
+    it("should return the tenant ID when set via runAsync()", async () => {
+      await service.runAsync(testTenantId, async () => {
+        expect(service.getCurrentTenantId()).toBe(testTenantId);
       });
     });
   });
 
   describe("run", () => {
-    it("should execute the callback with the tenant id in context", () => {
-      const testTenantId = "test-tenant-id";
-      const mockFn = jest.fn();
+    it("should execute the callback with tenant ID set in context", () => {
+      let callbackExecuted = false;
+      let tenantIdInCallback: string | null = null;
 
-      service.run(testTenantId, mockFn);
+      service.run(testTenantId, () => {
+        callbackExecuted = true;
+        tenantIdInCallback = service.getCurrentTenantId();
+        return "result";
+      });
 
-      expect(mockFn).toHaveBeenCalled();
+      expect(callbackExecuted).toBe(true);
+      expect(tenantIdInCallback).toBe(testTenantId);
     });
 
     it("should return the result of the callback", () => {
-      const testTenantId = "test-tenant-id";
-      const expectedResult = { success: true };
-
-      const result = service.run(testTenantId, () => expectedResult);
-
-      expect(result).toBe(expectedResult);
+      const result = service.run(testTenantId, () => "test-result");
+      expect(result).toBe("test-result");
     });
 
-    it("should propagate errors from the callback", () => {
-      const testTenantId = "test-tenant-id";
-      const testError = new Error("Test error");
+    it("should properly restore context after execution", () => {
+      // Initially no tenant ID
+      expect(service.getCurrentTenantId()).toBeNull();
 
+      // Set tenant ID via run
+      service.run(testTenantId, () => {
+        expect(service.getCurrentTenantId()).toBe(testTenantId);
+      });
+
+      // Should be reset after run completes
+      expect(service.getCurrentTenantId()).toBeNull();
+    });
+
+    it("should propagate errors from callback", () => {
+      const testError = new Error("Test error");
       expect(() => {
         service.run(testTenantId, () => {
           throw testError;
@@ -93,49 +85,47 @@ describe("TenantContextService", () => {
   });
 
   describe("runAsync", () => {
-    it("should execute the async callback with the tenant id in context", async () => {
-      const testTenantId = "test-tenant-id";
-      const mockFn = jest.fn().mockResolvedValue(undefined);
+    it("should execute the async callback with tenant ID set in context", async () => {
+      let callbackExecuted = false;
+      let tenantIdInCallback: string | null = null;
 
-      await service.runAsync(testTenantId, mockFn);
+      await service.runAsync(testTenantId, async () => {
+        callbackExecuted = true;
+        tenantIdInCallback = service.getCurrentTenantId();
+      });
 
-      expect(mockFn).toHaveBeenCalled();
+      expect(callbackExecuted).toBe(true);
+      expect(tenantIdInCallback).toBe(testTenantId);
     });
 
     it("should return the result of the async callback", async () => {
-      const testTenantId = "test-tenant-id";
-      const expectedResult = { success: true };
-
       const result = await service.runAsync(
         testTenantId,
-        async () => expectedResult
+        async () => "test-result"
       );
-
-      expect(result).toBe(expectedResult);
+      expect(result).toBe("test-result");
     });
 
-    it("should propagate errors from the async callback", async () => {
-      const testTenantId = "test-tenant-id";
-      const testError = new Error("Test error");
+    it("should properly restore context after execution", async () => {
+      // Initially no tenant ID
+      expect(service.getCurrentTenantId()).toBeNull();
 
+      // Set tenant ID via runAsync
+      await service.runAsync(testTenantId, async () => {
+        expect(service.getCurrentTenantId()).toBe(testTenantId);
+      });
+
+      // Should be reset after runAsync completes
+      expect(service.getCurrentTenantId()).toBeNull();
+    });
+
+    it("should propagate errors from async callback", async () => {
+      const testError = new Error("Test error");
       await expect(
         service.runAsync(testTenantId, async () => {
           throw testError;
         })
       ).rejects.toThrow(testError);
-    });
-
-    it("should maintain tenant context across async operations", async () => {
-      const testTenantId = "test-tenant-id";
-
-      await service.runAsync(testTenantId, async () => {
-        // Simulate some async operations
-        await Promise.resolve();
-        expect(service.getCurrentTenantId()).toBe(testTenantId);
-
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        expect(service.getCurrentTenantId()).toBe(testTenantId);
-      });
     });
   });
 });

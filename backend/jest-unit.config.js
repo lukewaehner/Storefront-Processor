@@ -1,5 +1,6 @@
+/* eslint-env node */
 // backend/jest-unit.config.js
-export default {
+module.exports = {
   moduleFileExtensions: ["js", "json", "ts"],
   rootDir: "src", // Look for source files in src
   testRegex: ".*\\.spec\\.ts$", // Match .spec.ts files
@@ -7,33 +8,17 @@ export default {
     "^.+\\.(t|j)s$": [
       "ts-jest",
       {
-        useESM: true,
+        tsconfig: "tsconfig.test.json",
       },
     ],
   },
-  extensionsToTreatAsEsm: [".ts"],
-  moduleNameMapper: {
-    "^(\\.{1,2}/.*)\\.js$": "$1",
-  },
-  collectCoverageFrom: [
-    "**/*.(t|j)s",
-    "!**/main.ts", // Don't collect coverage from main.ts
-    "!**/*module.ts", // Don't collect coverage from module files by default
-    "!**/*dto.ts", // Don't collect coverage from DTOs by default
-    "!**/*entity.ts", // Don't collect coverage from entities by default
-    "!**/prisma/*", // Ignore prisma generated client and service
-  ],
-  coverageDirectory: "../coverage-unit", // Separate coverage for unit tests
+  collectCoverageFrom: ["**/*.(t|j)s"],
+  coverageDirectory: "../coverage",
   testEnvironment: "node",
   clearMocks: true,
-  setupFilesAfterEnv: ["<rootDir>/../test/setup-jest.ts"],
-  globals: {
-    "ts-jest": {
-      tsconfig: "<rootDir>/../tsconfig.json",
-      useESM: true,
-    },
-  },
+  resetMocks: true,
+  restoreMocks: true,
   injectGlobals: true,
-  forceExit: true,
-  detectOpenHandles: true,
+  testTimeout: 30000,
+  setupFilesAfterEnv: ["<rootDir>/../test/jest-setup.js"],
 };

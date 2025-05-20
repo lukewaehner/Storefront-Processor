@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import {
   jest,
   describe,
@@ -9,31 +10,16 @@ import {
   afterAll,
 } from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
-import { TenantService } from "./tenant.service.js";
-import { PrismaService } from "../../prisma/prisma.service.js";
+import { TenantService } from "./tenant.service";
+import { PrismaService } from "../../prisma/prisma.service";
 import { ConfigModule } from "@nestjs/config";
-import { getPrismaTestClient } from "../../../test/utils/db-test-utils.js";
-import { TenantStatus } from "../dto/create-tenant.dto.js";
+import { getPrismaTestClient } from "../../../test/utils/db-test-utils";
+import { TenantStatus } from "../dto/create-tenant.dto";
 import { NotFoundException } from "@nestjs/common";
-
-// Create a complete mock PrismaService
-const mockPrismaService = {
-  tenant: {
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
-  domain: {
-    findFirst: jest.fn(),
-    deleteMany: jest.fn(),
-  },
-};
 
 describe("TenantService", () => {
   let service: TenantService;
-  let prismaService: PrismaService;
+  let mockPrismaService: any;
   let testClient;
   let testTenant;
 
@@ -70,7 +56,24 @@ describe("TenantService", () => {
   });
 
   beforeEach(async () => {
-    jest.resetAllMocks();
+    mockPrismaService = {
+      tenant: {
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      domain: {
+        findFirst: jest.fn(),
+        createMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      $transaction: jest.fn(function (callback) {
+        // @ts-ignore - Ignore type checking for this mock function
+        return callback(this);
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       imports: [
@@ -89,7 +92,6 @@ describe("TenantService", () => {
     }).compile();
 
     service = module.get<TenantService>(TenantService);
-    prismaService = module.get<PrismaService>(PrismaService);
   });
 
   it("should be defined", () => {
@@ -97,14 +99,18 @@ describe("TenantService", () => {
   });
 
   describe("findAll", () => {
-    it("should return an array of tenants", async () => {
-      const mockTenants = [{ id: "1", name: "Test Tenant" }];
+    it("should return all tenants", async () => {
+      const mockTenants = [
+        { id: "tenant1", name: "Tenant 1" },
+        { id: "tenant2", name: "Tenant 2" },
+      ];
 
-      // Set up the mock to return our test data
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.findMany.mockResolvedValue(mockTenants);
 
-      const tenants = await service.findAll();
-      expect(tenants).toEqual(mockTenants);
+      const result = await service.findAll();
+
+      expect(result).toEqual(mockTenants);
       expect(mockPrismaService.tenant.findMany).toHaveBeenCalled();
     });
   });
@@ -113,7 +119,7 @@ describe("TenantService", () => {
     it("should return a tenant when found", async () => {
       const mockTenant = { id: testTenant.id, name: testTenant.name };
 
-      // Set up the mock
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.findUnique.mockResolvedValue(mockTenant);
 
       const tenant = await service.findById(testTenant.id);
@@ -125,7 +131,7 @@ describe("TenantService", () => {
     });
 
     it("should throw NotFoundException when tenant not found", async () => {
-      // Set up the mock to return null
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.findUnique.mockResolvedValue(null);
 
       await expect(service.findById("non-existent-id")).rejects.toThrow(
@@ -147,7 +153,7 @@ describe("TenantService", () => {
         tenant: testTenant,
       };
 
-      // Set up the mock
+      // @ts-ignore: Type error in mock
       mockPrismaService.domain.findFirst.mockResolvedValue(
         mockDomainWithTenant
       );
@@ -163,7 +169,7 @@ describe("TenantService", () => {
     it("should return null when domain is not found", async () => {
       const domain = "non-existent-domain.com";
 
-      // Set up the mock to return null
+      // @ts-ignore: Type error in mock
       mockPrismaService.domain.findFirst.mockResolvedValue(null);
 
       const tenant = await service.findByDomain(domain);
@@ -199,7 +205,7 @@ describe("TenantService", () => {
         ...createTenantDto,
       };
 
-      // Set up the mock
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.create.mockResolvedValue(mockCreatedTenant);
 
       const createdTenant = await service.create(createTenantDto);
@@ -233,10 +239,10 @@ describe("TenantService", () => {
         slug: testTenant.slug,
       };
 
-      // Mock findById to return a tenant (no error)
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.findUnique.mockResolvedValue(testTenant);
 
-      // Set up the mock
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.update.mockResolvedValue(mockUpdatedTenant);
 
       const updatedTenant = await service.update(testTenant.id, updateData);
@@ -254,10 +260,10 @@ describe("TenantService", () => {
 
   describe("delete", () => {
     it("should delete a tenant", async () => {
-      // Mock findById to return a tenant (no error)
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.findUnique.mockResolvedValue(testTenant);
 
-      // Set up the mock
+      // @ts-ignore: Type error in mock
       mockPrismaService.tenant.delete.mockResolvedValue(testTenant);
 
       await service.delete(testTenant.id);

@@ -20,6 +20,7 @@
     "noFallthroughCasesInSwitch": false,
     "esModuleInterop": true,
     "isolatedModules": false,
+    "allowJs": true,
     "lib": ["es2018", "dom"],
     "paths": {
       "@/*": ["src/*"]
