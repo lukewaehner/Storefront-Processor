@@ -1,5 +1,5 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { TenantRequest } from '../interfaces/tenant-request.interface';
+import { createParamDecorator, ExecutionContext } from "@nestjs/common";
+import { TenantRequest } from "../interfaces/tenant-request.interface";
 
 /**
  * Extracts the current tenant from the request object.
@@ -9,7 +9,7 @@ export const GetTenant = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest<TenantRequest>();
     return request.tenant;
-  },
+  }
 );
 
 /**
@@ -20,5 +20,5 @@ export const GetTenantId = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest<TenantRequest>();
     return request.tenant?.id;
-  },
-); 
+  }
+);

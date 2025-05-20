@@ -8,7 +8,10 @@ async function bootstrap() {
   });
 
   // Set basic configuration
-  app.enableCors();
+  app.enableCors({
+    origin: true, // Allow all origins in development
+    credentials: true,
+  });
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

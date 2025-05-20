@@ -1,10 +1,19 @@
-import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
-import { TenantGuard } from "./tenant.guard";
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from "@jest/globals";
+import { TenantGuard } from "./tenant.guard.js";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Test, TestingModule } from "@nestjs/testing";
-import { IS_PUBLIC_KEY } from "../../auth/decorators/public.decorator";
-import { BYPASS_TENANT_KEY } from "../decorators/bypass-tenant.decorator";
+import { IS_PUBLIC_KEY } from "../../auth/decorators/public.decorator.js";
+import { BYPASS_TENANT_KEY } from "../decorators/bypass-tenant.decorator.js";
 
 describe("TenantGuard", () => {
   let guard: TenantGuard;

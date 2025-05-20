@@ -1,27 +1,36 @@
 /**
- * Utility functions for dealing with file paths in ESM modules.
- * This provides __dirname and __filename equivalents that work in ESM mode.
+ * Utility functions for dealing with file paths in both CommonJS and ESM modules.
  */
 import { fileURLToPath } from "url";
 import * as path from "path";
 
 /**
- * Get the directory name of a file in ESM context (equivalent to __dirname in CommonJS)
+ * Get the directory name of a file in either CommonJS or ESM context
  *
- * @param importMetaUrl The import.meta.url of the calling module
+ * @param importMetaUrl Optional import.meta.url for ESM context
  * @returns The directory name
  */
-export function getDirname(importMetaUrl: string): string {
-  const filename = fileURLToPath(importMetaUrl);
-  return path.dirname(filename);
+export function getDirname(importMetaUrl?: string): string {
+  if (importMetaUrl) {
+    // ESM context
+    const filename = fileURLToPath(importMetaUrl);
+    return path.dirname(filename);
+  }
+  // CommonJS context
+  return __dirname;
 }
 
 /**
- * Get the file name of a file in ESM context (equivalent to __filename in CommonJS)
+ * Get the file name of a file in either CommonJS or ESM context
  *
- * @param importMetaUrl The import.meta.url of the calling module
+ * @param importMetaUrl Optional import.meta.url for ESM context
  * @returns The file name
  */
-export function getFilename(importMetaUrl: string): string {
-  return fileURLToPath(importMetaUrl);
+export function getFilename(importMetaUrl?: string): string {
+  if (importMetaUrl) {
+    // ESM context
+    return fileURLToPath(importMetaUrl);
+  }
+  // CommonJS context
+  return __filename;
 }

@@ -2,10 +2,11 @@ import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 import * as path from "path";
-import { getDirname } from "../../src/utils/esm-paths.js";
+// Using regular CommonJS __dirname since we switched to CommonJS
+// import { getDirname } from "../../src/utils/esm-paths";
 
-// Get ESM-compatible __dirname
-const __dirname = getDirname(import.meta.url);
+// Get the current directory using CommonJS __dirname
+// const __dirname = getDirname(import.meta.url);
 
 // Load .env.test variables
 dotenv.config({ path: path.resolve(__dirname, "../../.env.test") });

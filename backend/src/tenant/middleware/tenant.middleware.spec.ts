@@ -1,9 +1,18 @@
-import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
-import { TenantMiddleware } from "./tenant.middleware";
-import { PrismaService } from "../../prisma/prisma.service";
-import { TenantService } from "../services/tenant.service";
-import { TenantContextService } from "../services/tenant-context.service";
+import { TenantMiddleware } from "./tenant.middleware.js";
+import { PrismaService } from "../../prisma/prisma.service.js";
+import { TenantService } from "../services/tenant.service.js";
+import { TenantContextService } from "../services/tenant-context.service.js";
 import { ConfigModule } from "@nestjs/config";
 import { getPrismaTestClient } from "../../../test/utils/db-test-utils.js";
 

@@ -2,12 +2,13 @@
   "name": "storefront-processor-backend",
   "version": "0.0.1",
   "description": "Backend for multi-tenant e-commerce platform",
-  "type": "module",
+  "type": "commonjs",
   "author": "",
   "private": true,
   "license": "MIT",
   "scripts": {
     "build": "nest build",
+    "build:dev": "nest build --webpack",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -28,7 +29,7 @@
     "prisma:migrate:test:deploy": "NODE_ENV=test prisma migrate deploy",
     "prisma:seed:test": "NODE_ENV=test ts-node prisma/seed-test.ts",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node --loader ts-node/esm prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -92,6 +93,6 @@
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
-    "seed": "node --loader ts-node/esm prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts"
   }
 }
