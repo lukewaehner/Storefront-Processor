@@ -3,6 +3,44 @@ set -e
 
 echo "Setting up development environment for Storefront Processor..."
 
+# Check if running on macOS
+if [[ "$(uname)" == "Darwin" ]]; then
+    echo "Detected macOS system"
+    
+    # Check if Homebrew is installed
+    if ! command -v brew &> /dev/null; then
+        echo "Error: Homebrew is not installed. Please install Homebrew before proceeding."
+        echo "Run this command to install: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        exit 1
+    fi
+    
+    # Check if PostgreSQL is installed via Homebrew
+    if ! brew list postgresql@14 &>/dev/null; then
+        echo "Installing PostgreSQL via Homebrew..."
+        brew install postgresql@14
+    fi
+    
+    # Start PostgreSQL service if not running
+    if ! brew services list | grep postgresql@14 | grep started &>/dev/null; then
+        echo "Starting PostgreSQL service..."
+        brew services start postgresql@14
+        
+        # Wait for PostgreSQL to start
+        echo "Waiting for PostgreSQL to start..."
+        sleep 5
+    else
+        echo "PostgreSQL is already running"
+    fi
+    
+    # Create development database if it doesn't exist
+    if ! psql -lqt postgres | cut -d \| -f 1 | grep -qw storefront_dev; then
+        echo "Creating storefront_dev database..."
+        createdb storefront_dev
+    else
+        echo "Database storefront_dev already exists"
+    fi
+fi
+
 # Check if Docker is installed
 if ! command -v docker &> /dev/null; then
     echo "Error: Docker is not installed. Please install Docker before proceeding."
@@ -13,6 +51,22 @@ fi
 if ! command -v docker-compose &> /dev/null; then
     echo "Error: Docker Compose is not installed. Please install Docker Compose before proceeding."
     exit 1
+fi
+
+# Start Docker Desktop on macOS if installed
+if [[ "$(uname)" == "Darwin" ]]; then
+    if [ -d "/Applications/Docker.app" ]; then
+        echo "Starting Docker Desktop..."
+        open -a Docker
+        
+        # Wait for Docker to start
+        echo "Waiting for Docker to start..."
+        while ! docker info &>/dev/null; do
+            echo "Waiting for Docker to be ready..."
+            sleep 2
+        done
+        echo "Docker is now running"
+    fi
 fi
 
 # Check if Node.js is installed
@@ -143,7 +197,7 @@ docker-compose up -d
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
-until docker-compose exec -T postgres pg_isready -U postgres; do
+until docker-compose exec -T postgres pg_isready -U postgres 2>/dev/null || psql -h localhost -U postgres -c '\q' 2>/dev/null; do
   echo "PostgreSQL is not ready yet... waiting"
   sleep 2
 done

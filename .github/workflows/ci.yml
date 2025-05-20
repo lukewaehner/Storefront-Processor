@@ -37,6 +37,21 @@ jobs:
     name: Run Tests
     needs: lint
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres_test
+          POSTGRES_PASSWORD: test_changeme
+          POSTGRES_DB: storefront_test
+        ports:
+          - 5433:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       matrix:
         component: [backend] # Only backend has tests for now
@@ -54,8 +69,41 @@ jobs:
       - name: Install dependencies
         run: cd ${{ matrix.component }} && npm ci
 
+      - name: Create test env file
+        run: |
+          cd ${{ matrix.component }}
+          cat << EOF > .env.test
+          NODE_ENV=test
+
+          # Test Database Configuration
+          POSTGRES_TEST_USER=postgres_test
+          POSTGRES_TEST_PASSWORD=test_changeme
+          POSTGRES_TEST_DB=storefront_test
+          POSTGRES_TEST_HOST=localhost
+          POSTGRES_TEST_PORT=5433
+
+          DATABASE_URL=postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
+
+          # Other test-specific settings
+          JWT_SECRET=test_jwt_secret
+          JWT_EXPIRES_IN=1h
+
+          # Redis
+          REDIS_HOST=localhost
+          REDIS_PORT=6379
+          REDIS_URL=redis://localhost:6379
+
+          BACKEND_PORT=4001
+          EOF
+
+      - name: Run prisma generate
+        run: cd ${{ matrix.component }} && npx prisma generate
+
       - name: Run unit tests
         run: cd ${{ matrix.component }} && npm run test:unit
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
