@@ -1,12 +1,14 @@
-import js from "@eslint/js";
-import tseslint from "@typescript-eslint/eslint-plugin";
-import tsParser from "@typescript-eslint/parser";
-import jest from "eslint-plugin-jest";
+/* eslint-env node */
+const js = require("@eslint/js");
+const tseslint = require("@typescript-eslint/eslint-plugin");
+const tsParser = require("@typescript-eslint/parser");
+const jest = require("eslint-plugin-jest");
 
-export default [
+module.exports = [
   js.configs.recommended,
   {
     files: ["**/*.ts", "**/*.tsx"],
+    ignores: ["**/*.spec.ts", "**/*.test.ts", "**/test/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -37,13 +39,18 @@ export default [
       "no-redeclare": "off",
     },
   },
-  // Jest config for test files
+  // Jest config for test files - without tsconfig project reference
   {
     files: ["**/*.spec.ts", "**/*.test.ts", "**/test/**/*.ts"],
     plugins: {
       jest,
+      "@typescript-eslint": tseslint,
     },
     languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        sourceType: "module",
+      },
       globals: {
         describe: true,
         it: true,
@@ -62,6 +69,14 @@ export default [
     rules: {
       ...jest.configs.recommended.rules,
       "no-undef": "off",
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+        },
+      ],
     },
   },
 ];

@@ -1,6 +1,20 @@
 /* eslint-env node */
 // This file is run before each test file
 // It can be used to set up global test environment variables
+const {
+  resetTestDatabase,
+  disconnectPrismaTestClient,
+} = require("./utils/db-test-utils");
+
+// Reset and migrate the test database before all tests
+beforeAll(async () => {
+  await resetTestDatabase();
+});
+
+// Disconnect the Prisma client after all tests
+afterAll(async () => {
+  await disconnectPrismaTestClient();
+});
 
 // Increase timeout for all tests since DB operations can be slow
 jest.setTimeout(30000);

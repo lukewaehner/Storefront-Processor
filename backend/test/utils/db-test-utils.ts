@@ -41,7 +41,7 @@ export const getPrismaTestClient = (): PrismaClient => {
  * Resets the test database to a clean state by running the
  * prisma:migrate:test:setup npm script.
  */
-export const resetTestDatabase = () => {
+export const resetTestDatabase = async () => {
   console.log("Resetting test database...");
   try {
     // Ensure NODE_ENV is test for the child process as well
@@ -84,3 +84,10 @@ export const disconnectPrismaTestClient = async () => {
 //   });
 //   console.log('Test data seeded.');
 // };
+
+// Export for CommonJS
+module.exports = {
+  getPrismaTestClient,
+  resetTestDatabase,
+  disconnectPrismaTestClient,
+};

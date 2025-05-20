@@ -22,6 +22,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:unit": "NODE_ENV=test jest --config jest-unit.config.js",
+    "test:unit:setup": "npm run prisma:migrate:test:setup && npm run test:unit",
     "fix:test-imports": "chmod +x ./scripts/update-test-imports.sh && ./scripts/update-test-imports.sh",
     "fix:jest-refs": "node scripts/add-jest-refs.js",
     "fix:tests": "npm run fix:test-imports && npm run fix:jest-refs",
