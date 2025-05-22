@@ -30,7 +30,21 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    // Check if the user has at least one of the required roles
-    return requiredRoles.some((role) => user.role === role);
+    // Define role hierarchy
+    const roleHierarchy = {
+      [UserRole.SUPER_ADMIN]: [
+        UserRole.SUPER_ADMIN,
+        UserRole.ADMIN,
+        UserRole.STAFF,
+        UserRole.CUSTOMER,
+      ],
+      [UserRole.ADMIN]: [UserRole.ADMIN, UserRole.STAFF, UserRole.CUSTOMER],
+      [UserRole.STAFF]: [UserRole.STAFF, UserRole.CUSTOMER],
+      [UserRole.CUSTOMER]: [UserRole.CUSTOMER],
+    };
+
+    // Check if the user's role can access any of the required roles
+    const userPermissions = roleHierarchy[user.role] || [];
+    return requiredRoles.some((role) => userPermissions.includes(role));
   }
 }

@@ -16,6 +16,7 @@ export class UsersController {
   }
 
   @Get("profile")
+  @UseGuards(JwtAuthGuard)
   getProfile(@GetUser() user: User) {
     return {
       message: "This endpoint requires authentication",
@@ -30,6 +31,7 @@ export class UsersController {
   }
 
   @Get("admin")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   getAdminData(@GetUser() user: User) {
     return {
@@ -43,6 +45,7 @@ export class UsersController {
   }
 
   @Get("super-admin")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
   getSuperAdminData(@GetUser() user: User) {
     return {
@@ -56,6 +59,7 @@ export class UsersController {
   }
 
   @Get("staff")
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.STAFF)
   getStaffData(@GetUser() user: User) {
     return {

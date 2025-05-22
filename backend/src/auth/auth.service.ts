@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../prisma/prisma.service";
@@ -12,9 +16,30 @@ export class AuthService {
   ) {}
 
   /**
+   * Finds a user by email
+   */
+  async findUserByEmail(email: string): Promise<any> {
+    const users = await this.prisma.user.findMany({
+      where: { email },
+    });
+
+    if (!users || users.length === 0) {
+      return null;
+    }
+
+    // Return the first user found with this email
+    return users[0];
+  }
+
+  /**
    * Validates user credentials and returns a JWT token
    */
   async validateUserCredentials(email: string, password: string): Promise<any> {
+    // Validate input
+    if (!email || !password) {
+      throw new BadRequestException("Email and password are required");
+    }
+
     // Find user by email - we'll need to handle the compound key
     const users = await this.prisma.user.findMany({
       where: { email },
