@@ -1,8 +1,3 @@
----
-description: Infrastructure and DevOps implementation guidelines
-globs: "infrastructure/**/*"
-alwaysApply: true
----
 
 # Infrastructure & DevOps Conventions
 
@@ -366,6 +361,11 @@ jobs:
 
 3. **Recovery Testing**
    * Scheduled DR drills
+   * Chaos engineering practices
+   * Documenting lessons learned
+   * Improving procedures iteratively
+
+By following these infrastructure and DevOps conventions, we ensure a reliable, secure, and maintainable platform that can scale to accommodate our multi-tenant requirements.
    * Chaos engineering practices
    * Documenting lessons learned
    * Improving procedures iteratively
