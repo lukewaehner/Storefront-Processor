@@ -9,4 +9,7 @@ module.exports = {
   collectCoverageFrom: ["**/*.(t|j)s"],
   coverageDirectory: "../coverage",
   testEnvironment: "node",
+  globalSetup: "<rootDir>/../test/setup.ts",
+  globalTeardown: "<rootDir>/../test/setup.ts",
+  setupFilesAfterEnv: ["<rootDir>/../test/jest.setup.ts"],
 };
