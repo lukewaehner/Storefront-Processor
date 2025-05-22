@@ -12,6 +12,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY backend/ .
 
 # Generate Prisma client before building
+ENV DATABASE_URL="postgresql://postgres:postgres@postgres:5432/storefront_dev"
 RUN npm run prisma:generate
 RUN npm run build
 

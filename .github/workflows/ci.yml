@@ -136,11 +136,15 @@ jobs:
 
       - name: Run prisma generate
         run: cd ${{ matrix.component }} && npx prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
 
       - name: Reset and prepare test database
         run: |
           cd ${{ matrix.component }}
           npx prisma migrate reset --force --skip-seed
+        env:
+          DATABASE_URL: postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
 
       - name: Run unit tests with retries and verbose output
         id: unit_tests
@@ -194,6 +198,8 @@ jobs:
 
       - name: Build
         run: cd ${{ matrix.component }} && npm run build
+        env:
+          DATABASE_URL: postgresql://postgres_test:test_changeme@localhost:5433/storefront_test
 
       - name: Cache build artifacts
         uses: actions/cache@v4
